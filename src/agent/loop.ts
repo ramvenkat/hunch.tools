@@ -159,40 +159,51 @@ export async function runAgentLoop(
 }
 
 function sessionEventsToMessages(events: SessionEvent[]): MessageParam[] {
-  return events.flatMap((event) => {
+  const messages: MessageParam[] = [];
+  let toolResults: ToolResultBlockParam[] = [];
+
+  const flushToolResults = (): void => {
+    if (toolResults.length === 0) {
+      return;
+    }
+
+    messages.push({
+      role: "user",
+      content: toolResults,
+    });
+    toolResults = [];
+  };
+
+  for (const event of events) {
     if (event.role === "tool") {
       if (event.toolUseId === undefined) {
-        return [];
+        continue;
       }
 
-      return [
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: event.toolUseId,
-              content: event.content,
-              ...(event.isError ? { is_error: true } : {}),
-            },
-          ],
-        } satisfies MessageParam,
-      ];
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: event.toolUseId,
+        content: event.content,
+        ...(event.isError ? { is_error: true } : {}),
+      });
+      continue;
     }
 
     if (event.role !== "user" && event.role !== "assistant") {
-      return [];
+      continue;
     }
 
-    return [
-      {
-        role: event.role,
-        content: Array.isArray(event.contentBlocks)
-          ? (event.contentBlocks as ContentBlockParam[])
-          : event.content,
-      } satisfies MessageParam,
-    ];
-  });
+    flushToolResults();
+    messages.push({
+      role: event.role,
+      content: Array.isArray(event.contentBlocks)
+        ? (event.contentBlocks as ContentBlockParam[])
+        : event.content,
+    });
+  }
+
+  flushToolResults();
+  return messages;
 }
 
 function sessionEvent(

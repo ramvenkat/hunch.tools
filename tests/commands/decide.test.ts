@@ -204,6 +204,51 @@ describe("decideCommand", () => {
       "Status: pending",
     );
   });
+
+  it("allows the agent to log a same-title replacement during pushback", async () => {
+    const { homeDir, decisionsFile } = await setupActiveSpike();
+    await writeDecisionFile(decisionsFile, [
+      decisionSection("Use cards", "pending", "They invite comparison."),
+    ]);
+    const select = vi.fn().mockResolvedValue("push_back");
+    const input = vi.fn().mockResolvedValue("Keep the title but change the flow.");
+    const client = {} as Anthropic;
+    const runAgent = vi.fn(async () => {
+      await writeFile(
+        decisionsFile,
+        `${await readFile(decisionsFile, "utf8")}${decisionSection(
+          "Use cards",
+          "pending",
+          "Replacement rationale.",
+        )}`,
+        "utf8",
+      );
+      return "Updated direction.";
+    });
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await decideCommand({
+      homeDir,
+      cwd: "/repo",
+      select,
+      input,
+      client,
+      runAgent,
+      env: { ANTHROPIC_API_KEY: "test-key" },
+    });
+
+    const content = await readFile(decisionsFile, "utf8");
+    expect(content).toContain(
+      [
+        "## Use cards",
+        "",
+        "Status: superseded",
+        "Time: 2026-04-25T00:00:00.000Z",
+      ].join("\n"),
+    );
+    expect(content).toContain("Replacement rationale.");
+    expect(content.match(/Status: pending/g)).toHaveLength(1);
+  });
 });
 
 async function setupActiveSpike(): Promise<{

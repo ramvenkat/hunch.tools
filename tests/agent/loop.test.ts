@@ -373,6 +373,92 @@ describe("runAgentLoop", () => {
       }),
     );
   });
+
+  it("replays parallel tool results in one user message", async () => {
+    const spike = await makeSpike();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await writeFile(
+      join(spike.hunchDir, "session.jsonl"),
+      [
+        JSON.stringify({
+          role: "user",
+          content: "Inspect the app",
+          ts: "2026-04-25T12:00:00.000Z",
+        }),
+        JSON.stringify({
+          role: "assistant",
+          content: "",
+          ts: "2026-04-25T12:00:01.000Z",
+          contentBlocks: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "read_file",
+              input: { path: "a.txt" },
+            },
+            {
+              type: "tool_use",
+              id: "toolu_2",
+              name: "read_file",
+              input: { path: "b.txt" },
+            },
+          ],
+        }),
+        JSON.stringify({
+          role: "tool",
+          content: "A",
+          ts: "2026-04-25T12:00:02.000Z",
+          toolUseId: "toolu_1",
+          toolName: "read_file",
+        }),
+        JSON.stringify({
+          role: "tool",
+          content: "B",
+          ts: "2026-04-25T12:00:03.000Z",
+          toolUseId: "toolu_2",
+          toolName: "read_file",
+        }),
+      ].join("\n") + "\n",
+      "utf8",
+    );
+    const client = fakeClient([
+      messageResponse({
+        content: [{ type: "text", text: "Continuing." }],
+        stopReason: "end_turn",
+      }),
+    ]);
+
+    await runAgentLoop({
+      client,
+      spike,
+      message: "Continue",
+    });
+
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: "user", content: "Inspect the app" },
+          expect.objectContaining({ role: "assistant" }),
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_1",
+                content: "A",
+              },
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_2",
+                content: "B",
+              },
+            ],
+          },
+          { role: "user", content: "Continue" },
+        ],
+      }),
+    );
+  });
 });
 
 function fakeClient(responses: Message[]): Anthropic {

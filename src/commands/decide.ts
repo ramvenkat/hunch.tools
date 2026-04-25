@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { input as promptInput, select as promptSelect } from "@inquirer/prompts";
@@ -121,28 +121,35 @@ async function pushBackOnDecision(
     throw new HunchError("Pushback text is required.");
   }
 
-  const config = await loadConfig(options);
-  const client =
-    options.client ??
-    createAnthropicClient({
-      apiKey: (options.env ?? process.env)[config.apiKeyEnv],
-      model: config.model,
-    });
-  const runAgent = options.runAgent ?? runAgentLoop;
-
-  await runAgent({
-    client,
-    spike,
-    verbose: options.verbose,
-    message: [
-      "The user pushed back on a pending UX decision.",
-      "",
-      `Decision: ${decision.title}`,
-      `Original rationale: ${decision.rationale}`,
-      `User pushback: ${pushback}`,
-      "",
-      "Revisit the prototype direction with this decision context. Update files as needed and log any new replacement decision.",
-    ].join("\n"),
-  });
+  const originalDecisionFile = await readFile(file, "utf8");
   await markDecision(file, decision.title, "superseded");
+
+  try {
+    const config = await loadConfig(options);
+    const client =
+      options.client ??
+      createAnthropicClient({
+        apiKey: (options.env ?? process.env)[config.apiKeyEnv],
+        model: config.model,
+      });
+    const runAgent = options.runAgent ?? runAgentLoop;
+
+    await runAgent({
+      client,
+      spike,
+      verbose: options.verbose,
+      message: [
+        "The user pushed back on a pending UX decision.",
+        "",
+        `Decision: ${decision.title}`,
+        `Original rationale: ${decision.rationale}`,
+        `User pushback: ${pushback}`,
+        "",
+        "Revisit the prototype direction with this decision context. Update files as needed and log any new replacement decision.",
+      ].join("\n"),
+    });
+  } catch (error) {
+    await writeFile(file, originalDecisionFile, "utf8");
+    throw error;
+  }
 }
