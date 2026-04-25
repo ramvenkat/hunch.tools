@@ -35,15 +35,21 @@ export async function readRecentSession(
         return [];
       }
 
-      return [parseSessionLine(trimmed, index + 1)];
+      return [parseSessionLine(file, trimmed, index + 1)];
     });
 
   return events.slice(-limit);
 }
 
-function parseSessionLine(line: string, lineNumber: number): SessionEvent {
+function parseSessionLine(
+  file: string,
+  line: string,
+  lineNumber: number,
+): SessionEvent {
+  let parsed: unknown;
+
   try {
-    return JSON.parse(line) as SessionEvent;
+    parsed = JSON.parse(line);
   } catch (error) {
     const message =
       error instanceof Error ? ` ${error.message}` : " Unknown parse error.";
@@ -51,4 +57,60 @@ function parseSessionLine(line: string, lineNumber: number): SessionEvent {
       `Malformed session JSON on line ${lineNumber}.${message}`,
     );
   }
+
+  return validateSessionEvent(file, lineNumber, parsed);
+}
+
+function validateSessionEvent(
+  file: string,
+  lineNumber: number,
+  event: unknown,
+): SessionEvent {
+  if (!isRecord(event)) {
+    throw invalidSessionEvent(file, lineNumber, "event must be an object");
+  }
+
+  if (!isSessionRole(event.role)) {
+    throw invalidSessionEvent(
+      file,
+      lineNumber,
+      "role must be user|assistant|tool",
+    );
+  }
+
+  if (typeof event.content !== "string") {
+    throw invalidSessionEvent(file, lineNumber, "content must be a string");
+  }
+
+  if (typeof event.ts !== "string") {
+    throw invalidSessionEvent(file, lineNumber, "ts must be a string");
+  }
+
+  if ("toolName" in event && typeof event.toolName !== "string") {
+    throw invalidSessionEvent(
+      file,
+      lineNumber,
+      "toolName must be a string when present",
+    );
+  }
+
+  return event as unknown as SessionEvent;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSessionRole(value: unknown): value is SessionEvent["role"] {
+  return value === "user" || value === "assistant" || value === "tool";
+}
+
+function invalidSessionEvent(
+  file: string,
+  lineNumber: number,
+  reason: string,
+): HunchError {
+  return new HunchError(
+    `Invalid session event in ${file} on line ${lineNumber}: ${reason}.`,
+  );
 }
