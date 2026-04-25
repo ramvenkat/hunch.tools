@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { listCommand } from "./commands/list.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
+import { runCommand } from "./commands/run.js";
 import type { PathResolverOptions } from "./state/paths.js";
 import { out } from "./ui/output.js";
 import { HunchError } from "./utils/errors.js";
@@ -31,6 +32,14 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .argument("<name>", "Spike name to activate.")
     .description("Set the active spike.")
     .action((name: string) => openCommand(name, options));
+
+  program
+    .command("run")
+    .description("Run the active spike.")
+    .option("--demo", "Run with VITE_HUNCH_DEMO=1")
+    .action((commandOptions: { demo?: boolean }) =>
+      runCommand({ ...options, ...commandOptions }),
+    );
 
   return program;
 }
