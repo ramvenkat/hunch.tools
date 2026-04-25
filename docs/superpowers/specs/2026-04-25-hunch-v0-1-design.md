@@ -112,7 +112,7 @@ The agent tools are deliberately narrow:
 - `generate_seed_data`: create realistic demo content for the spike.
 - `push_back`: classify scope creep against the current journey.
 
-Every file path is resolved and checked to stay inside the active spike directory. The agent cannot read or write generated dependency/build directories or Vite config files because those are executable surfaces for later CLI commands. `run_shell` only permits commands needed for v0.1 prototype workflows. Package-script execution is treated as untrusted because the agent can edit app files, so the shell tool permits `npm install` only with lifecycle scripts disabled.
+Every file path is resolved and checked to stay inside the active spike directory. The agent cannot read or write generated dependency/build directories, package-manager manifests/config, lockfiles, or Vite config files because those are executable surfaces for later CLI commands. `run_shell` only permits commands needed for v0.1 prototype workflows. Package-script execution is treated as untrusted because the agent can edit app files, so package installs run with lifecycle scripts disabled and a stripped environment.
 
 ## Data Flow
 

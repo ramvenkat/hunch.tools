@@ -26,12 +26,20 @@ export interface ListFilesToolInput {
 
 const PROTECTED_PATH_SEGMENTS = new Set(["node_modules", "dist"]);
 const PROTECTED_FILENAMES = new Set([
+  ".npmrc",
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "package.json",
+  "npm-shrinkwrap.json",
+  "pnpm-lock.yaml",
   "vite.config.js",
   "vite.config.mjs",
   "vite.config.cjs",
   "vite.config.ts",
   "vite.config.mts",
   "vite.config.cts",
+  "yarn.lock",
 ]);
 const DEFAULT_LIST_DEPTH = 2;
 const MAX_LIST_DEPTH = 10;
@@ -122,7 +130,9 @@ function assertToolPathAllowed(root: string, filePath: string): void {
 
   const filename = parts.at(-1) ?? "";
   if (PROTECTED_FILENAMES.has(filename)) {
-    throw new HunchError(`Tool paths must not target executable config: ${filename}`);
+    throw new HunchError(
+      `Tool paths must not target executable package surface: ${filename}`,
+    );
   }
 }
 

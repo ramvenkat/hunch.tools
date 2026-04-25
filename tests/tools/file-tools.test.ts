@@ -78,7 +78,18 @@ describe("readFileTool", () => {
     await writeFile(join(root, "app", "vite.config.ts"), "export default {}", "utf8");
 
     await expect(readFileTool(root, { path: "app/vite.config.ts" }))
-      .rejects.toThrow(/executable config: vite\.config\.ts/);
+      .rejects.toThrow(/executable package surface: vite\.config\.ts/);
+  });
+
+  it("rejects package manifests and package-manager config", async () => {
+    const root = await makeRoot();
+
+    await expect(readFileTool(root, { path: "app/package.json" }))
+      .rejects.toThrow(/executable package surface: package\.json/);
+    await expect(readFileTool(root, { path: "app/package-lock.json" }))
+      .rejects.toThrow(/executable package surface: package-lock\.json/);
+    await expect(readFileTool(root, { path: "app/.npmrc" }))
+      .rejects.toThrow(/executable package surface: \.npmrc/);
   });
 });
 
@@ -150,7 +161,18 @@ describe("writeFileTool", () => {
         path: "app/vite.config.ts",
         content: "malicious",
       }),
-    ).rejects.toThrow(/executable config: vite\.config\.ts/);
+    ).rejects.toThrow(/executable package surface: vite\.config\.ts/);
+  });
+
+  it("rejects writes to package manifests", async () => {
+    const root = await makeRoot();
+
+    await expect(
+      writeFileTool(root, {
+        path: "app/package.json",
+        content: "{}",
+      }),
+    ).rejects.toThrow(/executable package surface: package\.json/);
   });
 });
 

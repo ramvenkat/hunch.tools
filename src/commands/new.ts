@@ -53,6 +53,19 @@ export interface CreateSpikeOptions extends PathResolverOptions {
   initialGenerationRunner?: InitialGenerationRunner;
 }
 
+const SAFE_INSTALL_ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "SystemRoot",
+  "WINDIR",
+  "COMSPEC",
+  "USERPROFILE",
+  "PATHEXT",
+] as const;
+
 export async function newCommand(
   options: CreateSpikeOptions = {},
 ): Promise<void> {
@@ -243,8 +256,9 @@ async function runInitialGeneration(
 async function npmInstall(cwd: string, timeoutMs = 120_000): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let settled = false;
-    const child = spawn("npm", ["install"], {
+    const child = spawn("npm", ["install", "--ignore-scripts"], {
       cwd,
+      env: buildInstallEnv(),
       stdio: "inherit",
     });
     const timeout = setTimeout(() => {
@@ -284,4 +298,17 @@ async function npmInstall(cwd: string, timeoutMs = 120_000): Promise<void> {
       finish(new HunchError(`npm install failed with exit code ${code}.`));
     });
   });
+}
+
+function buildInstallEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+
+  for (const key of SAFE_INSTALL_ENV_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+
+  return env;
 }

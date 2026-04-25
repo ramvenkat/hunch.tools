@@ -14,9 +14,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSpike } from "../../src/commands/new.js";
 
 const originalPath = process.env.PATH;
+const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
 
 afterEach(() => {
   process.env.PATH = originalPath;
+  if (originalAnthropicApiKey === undefined) {
+    delete process.env.ANTHROPIC_API_KEY;
+  } else {
+    process.env.ANTHROPIC_API_KEY = originalAnthropicApiKey;
+  }
 });
 
 async function makeHome(): Promise<string> {
@@ -82,6 +88,49 @@ describe("createSpike", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(join(homeDir, ".hunch", "active"), "utf8")).rejects
       .toMatchObject({ code: "ENOENT" });
+  });
+
+  it("runs install with lifecycle scripts disabled and secrets stripped", async () => {
+    const homeDir = await makeHome();
+    const fakeBin = await mkdtemp(join(tmpdir(), "hunch-fake-bin-"));
+    const argsFile = join(fakeBin, "args.txt");
+    const envFile = join(fakeBin, "env.txt");
+    const fakeNpm = join(fakeBin, "npm");
+    await writeFile(
+      fakeNpm,
+      [
+        "#!/bin/sh",
+        `printf "%s\\n" "$@" > ${argsFile}`,
+        `printf "%s" "\${ANTHROPIC_API_KEY:-missing}" > ${envFile}`,
+        "exit 0",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await chmod(fakeNpm, 0o755);
+    process.env.PATH = `${fakeBin}:${originalPath ?? ""}`;
+    process.env.ANTHROPIC_API_KEY = "secret-value";
+
+    await createSpike(
+      {
+        problem: "Users need safe installs.",
+        persona: "PMs.",
+        journey: "Open the prototype.",
+        slug: "safe-install",
+      },
+      {
+        homeDir,
+        cwd: process.cwd(),
+        install: true,
+        generate: false,
+        date: new Date("2026-04-25T12:00:00Z"),
+      },
+    );
+
+    await expect(readFile(argsFile, "utf8")).resolves.toBe(
+      "install\n--ignore-scripts\n",
+    );
+    await expect(readFile(envFile, "utf8")).resolves.toBe("missing");
   });
 
   it("times out install without leaving a final spike", async () => {
