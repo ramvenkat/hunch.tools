@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { input } from "@inquirer/prompts";
 
@@ -29,6 +29,15 @@ export interface ShowCommandOptions extends PathResolverOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+interface ShowFs {
+  mkdir: typeof mkdir;
+  writeFile: typeof writeFile;
+  rename: typeof rename;
+  rm: typeof rm;
+}
+
+const defaultShowFs: ShowFs = { mkdir, writeFile, rename, rm };
+
 export async function showCommand(
   options: ShowCommandOptions = {},
 ): Promise<void> {
@@ -51,15 +60,23 @@ export async function showCommand(
   const scriptPrompt = await loadPrompt("show-script", promptValues);
   const questionsPrompt = await loadPrompt("show-questions", promptValues);
 
-  const script = await generateShowText(client, config.model, scriptPrompt);
-  const questions = await generateShowText(client, config.model, questionsPrompt);
+  const [script, questions] = await Promise.all([
+    generateShowText(
+      client,
+      config.model,
+      scriptPrompt,
+      "walkthrough script",
+    ),
+    generateShowText(
+      client,
+      config.model,
+      questionsPrompt,
+      "interview questions",
+    ),
+  ]);
 
   const showDir = path.join(spike.hunchDir, "show");
-  await mkdir(showDir, { recursive: true });
-  await Promise.all([
-    writeFile(path.join(showDir, "script.md"), `${script}\n`, "utf8"),
-    writeFile(path.join(showDir, "questions.md"), `${questions}\n`, "utf8"),
-  ]);
+  await writeShowFilesAtomically(showDir, script, questions);
 
   out.info(script);
   out.info("");
@@ -79,6 +96,7 @@ async function generateShowText(
   client: ShowClient,
   model: string,
   prompt: string,
+  label: string,
 ): Promise<string> {
   let response: { content: Array<{ type: string; text?: string }> };
 
@@ -89,7 +107,7 @@ async function generateShowText(
       messages: [{ role: "user", content: prompt }],
     });
   } catch (error) {
-    throw new HunchError(`Show generation failed: ${errorMessage(error)}`);
+    throw new HunchError(`Failed to generate ${label}: ${errorMessage(error)}`);
   }
 
   const text = extractText(response.content);
@@ -98,6 +116,91 @@ async function generateShowText(
   }
 
   return text;
+}
+
+export async function writeShowFilesAtomically(
+  showDir: string,
+  script: string,
+  questions: string,
+  fs: ShowFs = defaultShowFs,
+): Promise<void> {
+  await fs.mkdir(showDir, { recursive: true });
+
+  const suffix = `${process.pid}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  const files = [
+    {
+      finalPath: path.join(showDir, "script.md"),
+      tempPath: path.join(showDir, `.script.md.${suffix}.tmp`),
+      backupPath: path.join(showDir, `.script.md.${suffix}.bak`),
+      content: `${script}\n`,
+      backedUp: false,
+      installed: false,
+    },
+    {
+      finalPath: path.join(showDir, "questions.md"),
+      tempPath: path.join(showDir, `.questions.md.${suffix}.tmp`),
+      backupPath: path.join(showDir, `.questions.md.${suffix}.bak`),
+      content: `${questions}\n`,
+      backedUp: false,
+      installed: false,
+    },
+  ];
+
+  try {
+    await Promise.all(
+      files.map((file) => fs.writeFile(file.tempPath, file.content, "utf8")),
+    );
+
+    try {
+      for (const file of files) {
+        try {
+          await fs.rename(file.finalPath, file.backupPath);
+          file.backedUp = true;
+        } catch (error) {
+          if (!isMissingFile(error)) {
+            throw error;
+          }
+        }
+      }
+
+      for (const file of files) {
+        await fs.rename(file.tempPath, file.finalPath);
+        file.installed = true;
+      }
+    } catch (error) {
+      await rollbackShowFiles(files, fs);
+      throw error;
+    }
+
+    await Promise.all(files.map((file) => cleanup(file.backupPath, fs)));
+  } finally {
+    await Promise.all(files.map((file) => cleanup(file.tempPath, fs)));
+  }
+}
+
+async function rollbackShowFiles(
+  files: Array<{
+    finalPath: string;
+    backupPath: string;
+    backedUp: boolean;
+    installed: boolean;
+  }>,
+  fs: ShowFs,
+): Promise<void> {
+  for (const file of files) {
+    if (file.installed) {
+      await cleanup(file.finalPath, fs);
+    }
+  }
+
+  for (const file of files) {
+    if (file.backedUp) {
+      await fs.rename(file.backupPath, file.finalPath);
+      file.backedUp = false;
+    }
+  }
 }
 
 export function extractText(
@@ -112,4 +215,12 @@ export function extractText(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isMissingFile(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+async function cleanup(file: string, fs: ShowFs): Promise<void> {
+  await fs.rm(file, { force: true, recursive: true });
 }
