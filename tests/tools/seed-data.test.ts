@@ -31,13 +31,27 @@ describe("parseSeedDataJson", () => {
     );
   });
 
-  it("requires each item title and body to be strings", () => {
+  it("rejects invalid JSON syntax", () => {
+    expect(() => parseSeedDataJson("{")).toThrow("Invalid seed data JSON:");
+  });
+
+  it("requires each item title to be a string", () => {
+    expect(() =>
+      parseSeedDataJson(
+        JSON.stringify({
+          items: [{ title: 42, body: "Complete profile setup." }],
+        }),
+      ),
+    ).toThrow("Seed data item 0 title must be a string.");
+  });
+
+  it("requires each item body to be a string", () => {
     expect(() =>
       parseSeedDataJson(
         JSON.stringify({
           items: [{ title: "Welcome checklist", body: 42 }],
         }),
       ),
-    ).toThrow("Seed data item 0 must include string title and body.");
+    ).toThrow("Seed data item 0 body must be a string.");
   });
 });

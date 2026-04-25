@@ -24,17 +24,18 @@ export function parseSeedDataJson(text: string): SeedData {
   }
 
   const items = parsed.items.map((item, index) => {
-    if (
-      typeof item !== "object" ||
-      item === null ||
-      !("title" in item) ||
-      !("body" in item) ||
-      typeof item.title !== "string" ||
-      typeof item.body !== "string"
-    ) {
+    if (typeof item !== "object" || item === null) {
       throw new HunchError(
         `Seed data item ${index} must include string title and body.`,
       );
+    }
+
+    if (!("title" in item) || typeof item.title !== "string") {
+      throw new HunchError(`Seed data item ${index} title must be a string.`);
+    }
+
+    if (!("body" in item) || typeof item.body !== "string") {
+      throw new HunchError(`Seed data item ${index} body must be a string.`);
     }
 
     return {

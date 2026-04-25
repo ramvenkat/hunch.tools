@@ -38,6 +38,35 @@ describe("appendDecision", () => {
       ].join("\n"),
     );
   });
+
+  it("rejects multiline decision titles", async () => {
+    const file = await makeDecisionFile();
+
+    await expect(
+      appendDecision(file, {
+        decision: "Use cards\n## Fake section",
+        rationale: "They invite comparison.",
+        ts: "2026-04-25T00:00:00.000Z",
+      }),
+    ).rejects.toThrow("Decision title must be a single line.");
+  });
+
+  it("rejects duplicate pending decision titles", async () => {
+    const file = await makeDecisionFile();
+    await appendDecision(file, {
+      decision: "Use cards",
+      rationale: "They invite comparison.",
+      ts: "2026-04-25T00:00:00.000Z",
+    });
+
+    await expect(
+      appendDecision(file, {
+        decision: "Use cards",
+        rationale: "They still invite comparison.",
+        ts: "2026-04-25T01:00:00.000Z",
+      }),
+    ).rejects.toThrow("Pending decision already exists: Use cards");
+  });
 });
 
 describe("markDecision", () => {
@@ -82,6 +111,52 @@ describe("markDecision", () => {
         "",
         "They separate flows.",
       ].join("\n"),
+    );
+  });
+
+  it("does not treat rationale headings as markable decision sections", async () => {
+    const file = await makeDecisionFile();
+    await appendDecision(file, {
+      decision: "Use cards",
+      rationale: "They invite comparison.\n\n## Fake heading\n\nMore rationale.",
+      ts: "2026-04-25T00:00:00.000Z",
+    });
+
+    await expect(markDecision(file, "Fake heading", "approved")).rejects.toThrow(
+      "Decision not found: Fake heading",
+    );
+
+    await expect(markDecision(file, "Use cards", "approved")).resolves.toBe(
+      "Marked decision approved: Use cards",
+    );
+    await expect(readFile(file, "utf8")).resolves.toContain("## Fake heading");
+  });
+
+  it("rejects ambiguous duplicate pending matches", async () => {
+    const file = await makeDecisionFile();
+    await writeFile(
+      file,
+      [
+        "## Use cards",
+        "",
+        "Status: pending",
+        "Time: 2026-04-25T00:00:00.000Z",
+        "",
+        "They invite comparison.",
+        "",
+        "## Use cards",
+        "",
+        "Status: pending",
+        "Time: 2026-04-25T01:00:00.000Z",
+        "",
+        "They still invite comparison.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(markDecision(file, "Use cards", "approved")).rejects.toThrow(
+      "Multiple pending decisions found: Use cards",
     );
   });
 
