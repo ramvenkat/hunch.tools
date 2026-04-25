@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 
 import { listCommand } from "./commands/list.js";
+import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
 import type { PathResolverOptions } from "./state/paths.js";
 import { out } from "./ui/output.js";
@@ -14,6 +15,11 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .name("hunch")
     .description("Turn a customer problem into a disposable prototype.")
     .version("0.1.0");
+
+  program
+    .command("new")
+    .description("Start a new spike.")
+    .action(() => newCommand(options));
 
   program
     .command("list")
