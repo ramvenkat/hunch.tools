@@ -38,7 +38,7 @@ export async function readRecentSession(
       return [parseSessionLine(file, trimmed, index + 1)];
     });
 
-  return trimLeadingToolEvents(events.slice(-limit));
+  return dropIncompleteToolTurns(trimLeadingToolEvents(events.slice(-limit)));
 }
 
 function trimLeadingToolEvents(events: SessionEvent[]): SessionEvent[] {
@@ -48,6 +48,69 @@ function trimLeadingToolEvents(events: SessionEvent[]): SessionEvent[] {
   }
 
   return events.slice(firstNonTool);
+}
+
+function dropIncompleteToolTurns(events: SessionEvent[]): SessionEvent[] {
+  const safeEvents: SessionEvent[] = [];
+
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    if (event === undefined) {
+      continue;
+    }
+
+    if (event.role !== "assistant") {
+      safeEvents.push(event);
+      continue;
+    }
+
+    const toolUseIds = assistantToolUseIds(event);
+    if (toolUseIds.length === 0) {
+      safeEvents.push(event);
+      continue;
+    }
+
+    const toolEvents: SessionEvent[] = [];
+    let cursor = index + 1;
+    while (events[cursor]?.role === "tool") {
+      const toolEvent = events[cursor];
+      if (toolEvent !== undefined) {
+        toolEvents.push(toolEvent);
+      }
+      cursor += 1;
+    }
+
+    const answeredIds = new Set(
+      toolEvents.flatMap((toolEvent) =>
+        toolEvent.toolUseId === undefined ? [] : [toolEvent.toolUseId],
+      ),
+    );
+    const isComplete = toolUseIds.every((toolUseId) =>
+      answeredIds.has(toolUseId),
+    );
+
+    if (isComplete) {
+      safeEvents.push(event, ...toolEvents);
+    }
+
+    index = cursor - 1;
+  }
+
+  return trimLeadingToolEvents(safeEvents);
+}
+
+function assistantToolUseIds(event: SessionEvent): string[] {
+  if (!Array.isArray(event.contentBlocks)) {
+    return [];
+  }
+
+  return event.contentBlocks.flatMap((block) => {
+    if (!isRecord(block) || block.type !== "tool_use") {
+      return [];
+    }
+
+    return typeof block.id === "string" ? [block.id] : [];
+  });
 }
 
 function parseSessionLine(

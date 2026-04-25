@@ -134,6 +134,83 @@ describe("session events", () => {
     ]);
   });
 
+  it("drops dangling assistant tool-use events without matching tool results", async () => {
+    const dir = await makeSpikeDir();
+    const sessionFile = join(dir, ".hunch", "session.jsonl");
+    const events: SessionEvent[] = [
+      {
+        role: "user",
+        content: "Build a dashboard",
+        ts: "2026-04-25T12:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        content: "",
+        ts: "2026-04-25T12:00:01.000Z",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "read_file",
+            input: { path: "README.md" },
+          },
+        ],
+      },
+    ];
+    await writeFile(
+      sessionFile,
+      events.map((event) => JSON.stringify(event)).join("\n"),
+      "utf8",
+    );
+
+    await expect(readRecentSession(sessionFile)).resolves.toEqual([events[0]]);
+  });
+
+  it("drops partial assistant tool-use groups with missing tool results", async () => {
+    const dir = await makeSpikeDir();
+    const sessionFile = join(dir, ".hunch", "session.jsonl");
+    const events: SessionEvent[] = [
+      {
+        role: "user",
+        content: "Build a dashboard",
+        ts: "2026-04-25T12:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        content: "",
+        ts: "2026-04-25T12:00:01.000Z",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "read_file",
+            input: { path: "README.md" },
+          },
+          {
+            type: "tool_use",
+            id: "toolu_2",
+            name: "read_file",
+            input: { path: "package.json" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: "README contents",
+        ts: "2026-04-25T12:00:02.000Z",
+        toolUseId: "toolu_1",
+        toolName: "read_file",
+      },
+    ];
+    await writeFile(
+      sessionFile,
+      events.map((event) => JSON.stringify(event)).join("\n"),
+      "utf8",
+    );
+
+    await expect(readRecentSession(sessionFile)).resolves.toEqual([events[0]]);
+  });
+
   it("wraps malformed session JSON with context", async () => {
     const dir = await makeSpikeDir();
     const sessionFile = join(dir, ".hunch", "session.jsonl");
