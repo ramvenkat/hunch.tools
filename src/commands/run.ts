@@ -9,6 +9,7 @@ import { HunchError } from "../utils/errors.js";
 
 export interface RunCommandOptions extends PathResolverOptions {
   demo?: boolean;
+  sigintGraceMs?: number;
 }
 
 export async function runCommand(
@@ -56,7 +57,13 @@ export async function runCommand(
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
+    let interrupted = false;
+    let sigintTimer: ReturnType<typeof setTimeout> | undefined;
     const cleanup = (): void => {
+      if (sigintTimer) {
+        clearTimeout(sigintTimer);
+      }
+
       process.off("SIGINT", handleSigint);
     };
     const finish = (error?: Error): void => {
@@ -74,22 +81,42 @@ export async function runCommand(
       resolve();
     };
     const handleSigint = (): void => {
+      if (interrupted) {
+        child.kill("SIGKILL");
+        finish(interruptedError());
+        return;
+      }
+
+      interrupted = true;
       child.kill("SIGINT");
+      sigintTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+        finish(interruptedError());
+      }, options.sigintGraceMs ?? 3_000);
     };
 
     process.on("SIGINT", handleSigint);
 
     child.on("error", (error) => {
       spinner.fail("Failed to start dev server.");
-      finish(new HunchError(`Failed to start dev server: ${error.message}`));
+      finish(
+        interrupted
+          ? interruptedError()
+          : new HunchError(`Failed to start dev server: ${error.message}`),
+      );
     });
     child.on("exit", (code, signal) => {
+      if (interrupted || signal === "SIGINT") {
+        finish(interruptedError());
+        return;
+      }
+
       if (code && code !== 0) {
         finish(new HunchError(`Dev server exited with code ${code}.`));
         return;
       }
 
-      if (signal && signal !== "SIGINT") {
+      if (signal) {
         finish(new HunchError(`Dev server exited with signal ${signal}.`));
         return;
       }
@@ -97,4 +124,8 @@ export async function runCommand(
       finish();
     });
   });
+}
+
+function interruptedError(): HunchError {
+  return new HunchError("Interrupted.", 130);
 }
