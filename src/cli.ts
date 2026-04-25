@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 
+import { askCommand } from "./commands/ask.js";
 import { listCommand } from "./commands/list.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
@@ -39,6 +40,22 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .option("--demo", "Run with VITE_HUNCH_DEMO=1")
     .action((commandOptions: { demo?: boolean }) =>
       runCommand({ ...options, ...commandOptions }),
+    );
+
+  program
+    .command("ask")
+    .argument("[message...]", "Message to send to the active spike agent.")
+    .description("Ask the active spike agent for help.")
+    .option("--verbose", "Print tool activity.")
+    .action(
+      (
+        messageParts: string[] | undefined,
+        commandOptions: { verbose?: boolean },
+      ) =>
+        askCommand(messageParts?.join(" "), {
+          ...options,
+          ...commandOptions,
+        }),
     );
 
   return program;
