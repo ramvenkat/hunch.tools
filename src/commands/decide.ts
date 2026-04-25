@@ -121,8 +121,6 @@ async function pushBackOnDecision(
     throw new HunchError("Pushback text is required.");
   }
 
-  await markDecision(file, decision.title, "superseded");
-
   const config = await loadConfig(options);
   const client =
     options.client ??
@@ -146,4 +144,5 @@ async function pushBackOnDecision(
       "Revisit the prototype direction with this decision context. Update files as needed and log any new replacement decision.",
     ].join("\n"),
   });
+  await markDecision(file, decision.title, "superseded");
 }

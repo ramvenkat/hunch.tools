@@ -176,6 +176,34 @@ describe("decideCommand", () => {
       }),
     );
   });
+
+  it("keeps a pushed-back decision pending when the agent fails", async () => {
+    const { homeDir, decisionsFile } = await setupActiveSpike();
+    await writeDecisionFile(decisionsFile, [
+      decisionSection("Use cards", "pending", "They invite comparison."),
+    ]);
+    const select = vi.fn().mockResolvedValue("push_back");
+    const input = vi.fn().mockResolvedValue("This needs a faster path.");
+    const client = {} as Anthropic;
+    const runAgent = vi.fn().mockRejectedValue(new Error("agent failed"));
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      decideCommand({
+        homeDir,
+        cwd: "/repo",
+        select,
+        input,
+        client,
+        runAgent,
+        env: { ANTHROPIC_API_KEY: "test-key" },
+      }),
+    ).rejects.toThrow("agent failed");
+
+    await expect(readFile(decisionsFile, "utf8")).resolves.toContain(
+      "Status: pending",
+    );
+  });
 });
 
 async function setupActiveSpike(): Promise<{
