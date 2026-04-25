@@ -112,6 +112,12 @@ describe("spikeRef", () => {
 });
 
 describe("buildSpikeName", () => {
+  it("builds the requested spike name fixture", () => {
+    expect(
+      buildSpikeName("first-prompt", new Date("2026-04-25T12:00:00Z")),
+    ).toBe("2026-04-25-first-prompt");
+  });
+
   it("prefixes slugs with the ISO date stamp", () => {
     expect(
       buildSpikeName("first-time-users", new Date("2026-04-25T12:34:56.000Z")),
