@@ -114,6 +114,20 @@ describe("loadConfig", () => {
     );
   });
 
+  it.each([
+    ["model", 'model: ""\n'],
+    ["api_key_env", 'api_key_env: "   "\n'],
+    ["spike_dir", 'spike_dir: ""\n'],
+  ])("rejects blank %s values", async (key, yaml) => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), yaml);
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      new RegExp(`Invalid Hunch config: ${key}`),
+    );
+  });
+
   it("rejects non-object agent config", async () => {
     const homeDir = await makeHome();
     await mkdir(join(homeDir, ".hunch"));

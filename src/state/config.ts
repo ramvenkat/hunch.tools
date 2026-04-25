@@ -136,6 +136,10 @@ function readOptionalString(value: unknown, key: string): string {
     throw invalidConfig(`${key} must be a string`);
   }
 
+  if (value.trim().length === 0) {
+    throw invalidConfig(`${key} must not be blank`);
+  }
+
   return value;
 }
 

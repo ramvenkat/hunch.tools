@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSpikeName,
   getActiveSpike,
   listSpikes,
   setActiveSpike,
@@ -107,5 +108,13 @@ describe("spikeRef", () => {
     expect(() => spikeRef("/tmp/hunches", "../outside")).toThrow(
       /Invalid spike name/,
     );
+  });
+});
+
+describe("buildSpikeName", () => {
+  it("prefixes slugs with the ISO date stamp", () => {
+    expect(
+      buildSpikeName("first-time-users", new Date("2026-04-25T12:34:56.000Z")),
+    ).toBe("2026-04-25-first-time-users");
   });
 });
