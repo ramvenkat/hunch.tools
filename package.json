@@ -13,7 +13,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/prompts && cp src/prompts/*.md dist/prompts/",
     "dev": "tsx src/cli.ts",
     "prepack": "npm run build",
     "test": "vitest run",
