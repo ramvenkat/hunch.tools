@@ -56,6 +56,30 @@ describe("readFileTool", () => {
     await expect(readFileTool(root, { path: join(root, "app", "App.tsx") }))
       .rejects.toThrow(/relative/);
   });
+
+  it("rejects generated dependency directories", async () => {
+    const root = await makeRoot();
+    await mkdir(join(root, "app", "node_modules", "vite", "bin"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(root, "app", "node_modules", "vite", "bin", "vite.js"),
+      "console.log('vite')",
+      "utf8",
+    );
+
+    await expect(
+      readFileTool(root, { path: "app/node_modules/vite/bin/vite.js" }),
+    ).rejects.toThrow(/generated directory: node_modules/);
+  });
+
+  it("rejects executable Vite config files", async () => {
+    const root = await makeRoot();
+    await writeFile(join(root, "app", "vite.config.ts"), "export default {}", "utf8");
+
+    await expect(readFileTool(root, { path: "app/vite.config.ts" }))
+      .rejects.toThrow(/executable config: vite\.config\.ts/);
+  });
 });
 
 describe("writeFileTool", () => {
@@ -105,6 +129,28 @@ describe("writeFileTool", () => {
         content: "overwrite",
       }),
     ).rejects.toThrow(/Symlinks are not allowed/);
+  });
+
+  it("rejects writes into generated dependency directories", async () => {
+    const root = await makeRoot();
+
+    await expect(
+      writeFileTool(root, {
+        path: "app/node_modules/vite/bin/vite.js",
+        content: "malicious",
+      }),
+    ).rejects.toThrow(/generated directory: node_modules/);
+  });
+
+  it("rejects writes to executable Vite config files", async () => {
+    const root = await makeRoot();
+
+    await expect(
+      writeFileTool(root, {
+        path: "app/vite.config.ts",
+        content: "malicious",
+      }),
+    ).rejects.toThrow(/executable config: vite\.config\.ts/);
   });
 });
 
@@ -167,6 +213,26 @@ describe("editFileTool", () => {
     ).rejects.toThrow(/Symlinks are not allowed/);
 
     await expect(readFile(outsideFile, "utf8")).resolves.toBe("secret old");
+  });
+
+  it("rejects edits in generated dependency directories", async () => {
+    const root = await makeRoot();
+    await mkdir(join(root, "app", "node_modules", "vite", "bin"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(root, "app", "node_modules", "vite", "bin", "vite.js"),
+      "before",
+      "utf8",
+    );
+
+    await expect(
+      editFileTool(root, {
+        path: "app/node_modules/vite/bin/vite.js",
+        old_str: "before",
+        new_str: "after",
+      }),
+    ).rejects.toThrow(/generated directory: node_modules/);
   });
 });
 
@@ -251,6 +317,15 @@ describe("listFilesTool", () => {
     await expect(listFilesTool(root, { path: "link-dir" })).rejects.toThrow(
       /Symlinks are not allowed/,
     );
+  });
+
+  it("rejects generated directories as the requested list path", async () => {
+    const root = await makeRoot();
+    await mkdir(join(root, "app", "node_modules"), { recursive: true });
+
+    await expect(
+      listFilesTool(root, { path: "app/node_modules" }),
+    ).rejects.toThrow(/generated directory: node_modules/);
   });
 
   it("rejects listings that exceed the entry cap", async () => {

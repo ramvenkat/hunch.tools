@@ -24,7 +24,15 @@ export interface ListFilesToolInput {
   depth?: number;
 }
 
-const SKIPPED_DIRS = new Set(["node_modules", "dist"]);
+const PROTECTED_PATH_SEGMENTS = new Set(["node_modules", "dist"]);
+const PROTECTED_FILENAMES = new Set([
+  "vite.config.js",
+  "vite.config.mjs",
+  "vite.config.cjs",
+  "vite.config.ts",
+  "vite.config.mts",
+  "vite.config.cts",
+]);
 const DEFAULT_LIST_DEPTH = 2;
 const MAX_LIST_DEPTH = 10;
 const MAX_LIST_ENTRIES = 1000;
@@ -93,8 +101,29 @@ async function resolveInside(
   }
 
   const resolved = assertInside(root, path.resolve(root, requestedPath));
+  assertToolPathAllowed(root, resolved);
   await assertNoSymlinks(root, resolved, options.allowMissingLeaf ?? false);
   return resolved;
+}
+
+function assertToolPathAllowed(root: string, filePath: string): void {
+  const relative = toRelativePath(root, filePath);
+  if (relative === "") {
+    return;
+  }
+
+  const parts = relative.split("/");
+  const blockedSegment = parts.find((part) => PROTECTED_PATH_SEGMENTS.has(part));
+  if (blockedSegment !== undefined) {
+    throw new HunchError(
+      `Tool paths must not target generated directory: ${blockedSegment}`,
+    );
+  }
+
+  const filename = parts.at(-1) ?? "";
+  if (PROTECTED_FILENAMES.has(filename)) {
+    throw new HunchError(`Tool paths must not target executable config: ${filename}`);
+  }
 }
 
 function toRelativePath(root: string, filePath: string): string {
@@ -178,7 +207,7 @@ export async function listFilesTool(
     const entries = await readdir(currentPath, { withFileTypes: true });
 
     for (const entry of entries.sort((a, b) => comparePath(a.name, b.name))) {
-      if (entry.isDirectory() && SKIPPED_DIRS.has(entry.name)) {
+      if (entry.isDirectory() && PROTECTED_PATH_SEGMENTS.has(entry.name)) {
         continue;
       }
 
