@@ -218,6 +218,14 @@ describe("listFilesTool", () => {
     );
   });
 
+  it("rejects depths above the runtime maximum", async () => {
+    const root = await makeRoot();
+
+    await expect(listFilesTool(root, { depth: 11 })).rejects.toThrow(
+      /depth must be 10 or less/,
+    );
+  });
+
   it("rejects list paths that escape the root", async () => {
     const root = await makeRoot();
 

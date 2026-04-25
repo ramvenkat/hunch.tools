@@ -26,6 +26,7 @@ export interface ListFilesToolInput {
 
 const SKIPPED_DIRS = new Set(["node_modules", "dist"]);
 const DEFAULT_LIST_DEPTH = 2;
+const MAX_LIST_DEPTH = 10;
 const MAX_LIST_ENTRIES = 1000;
 
 function comparePath(a: string, b: string): number {
@@ -163,6 +164,9 @@ export async function listFilesTool(
     (!Number.isInteger(input.depth) || input.depth < 0)
   ) {
     throw new HunchError("list_files depth must be a non-negative integer.");
+  }
+  if (input.depth !== undefined && input.depth > MAX_LIST_DEPTH) {
+    throw new HunchError(`list_files depth must be ${MAX_LIST_DEPTH} or less.`);
   }
 
   const startPath = await resolveInside(root, input.path ?? ".");
