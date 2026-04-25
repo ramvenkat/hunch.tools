@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 
 export function buildCli(): Command {
@@ -19,6 +20,6 @@ export async function runCli(argv = process.argv): Promise<void> {
   await buildCli().parseAsync(argv);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (fileURLToPath(import.meta.url) === process.argv[1]) {
   await runCli();
 }
