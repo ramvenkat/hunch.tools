@@ -7,6 +7,11 @@ const RELATIVE_PATH_SCHEMA = {
   description: "Relative path within the spike root.",
 } as const;
 
+const REQUIRED_STRING_SCHEMA = {
+  type: "string",
+  minLength: 1,
+} as const;
+
 export const toolDefinitions = [
   {
     name: "read_file",
@@ -89,6 +94,55 @@ export const toolDefinitions = [
         },
       },
       required: ["command"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "decide",
+    description: "Log a meaningful UX decision with a one-sentence rationale.",
+    input_schema: {
+      type: "object",
+      properties: {
+        decision: {
+          ...REQUIRED_STRING_SCHEMA,
+          description: "The UX decision to log.",
+        },
+        rationale: {
+          ...REQUIRED_STRING_SCHEMA,
+          description: "One-sentence rationale for the decision.",
+        },
+      },
+      required: ["decision", "rationale"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "generate_seed_data",
+    description: "Generate realistic demo content for the current spike.",
+    input_schema: {
+      type: "object",
+      properties: {
+        purpose: {
+          ...REQUIRED_STRING_SCHEMA,
+          description: "What the demo content should support.",
+        },
+      },
+      required: ["purpose"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "push_back",
+    description: "Classify whether a user request is in scope for the spike.",
+    input_schema: {
+      type: "object",
+      properties: {
+        request: {
+          ...REQUIRED_STRING_SCHEMA,
+          description: "The user request to classify.",
+        },
+      },
+      required: ["request"],
       additionalProperties: false,
     },
   },
