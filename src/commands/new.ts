@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
-import { cp, mkdir, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { confirm, input } from "@inquirer/prompts";
@@ -28,6 +36,7 @@ export interface CreateSpikeOptions extends PathResolverOptions {
   install?: boolean;
   generate?: boolean;
   date?: Date;
+  installTimeoutMs?: number;
 }
 
 export async function newCommand(
@@ -80,7 +89,57 @@ export async function createSpike(
   const config = await loadConfig(options);
   const name = buildSpikeName(answers.slug.trim(), options.date);
   const spike = spikeRef(config.spikeDir, name);
+  await failIfFinalSpikeExists(spike.dir, name);
+  await mkdir(config.spikeDir, { recursive: true });
+  const stagingDir = await mkdtemp(path.join(config.spikeDir, `.${name}-`));
+  const stagingSpike: SpikeRef = {
+    name,
+    dir: stagingDir,
+    appDir: path.join(stagingDir, "app"),
+    hunchDir: path.join(stagingDir, ".hunch"),
+  };
+  let renamed = false;
 
+  try {
+    await writeSpikeFiles(stagingSpike, name, answers);
+
+    if (options.install) {
+      await npmInstall(stagingSpike.appDir, options.installTimeoutMs);
+    }
+
+    await rename(stagingSpike.dir, spike.dir);
+    renamed = true;
+    await setActiveSpike(name, options);
+  } catch (error) {
+    await rm(renamed ? spike.dir : stagingSpike.dir, {
+      recursive: true,
+      force: true,
+    });
+    throw error;
+  }
+
+  return spike;
+}
+
+async function failIfFinalSpikeExists(dir: string, name: string): Promise<void> {
+  const existing = await stat(dir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  });
+
+  if (existing) {
+    throw new HunchError(`Spike already exists: ${name}`);
+  }
+}
+
+async function writeSpikeFiles(
+  spike: SpikeRef,
+  name: string,
+  answers: NewSpikeAnswers,
+): Promise<void> {
   await cp(resolveTemplatePath(), spike.appDir, {
     recursive: true,
     errorOnExist: true,
@@ -129,14 +188,6 @@ export async function createSpike(
     ].join("\n"),
     "utf8",
   );
-
-  await setActiveSpike(name, options);
-
-  if (options.install) {
-    await npmInstall(spike.appDir);
-  }
-
-  return spike;
 }
 
 function resolveTemplatePath(): string {
@@ -148,21 +199,48 @@ function validateRequired(value: string): true | string {
   return value.trim().length > 0 ? true : "Required";
 }
 
-async function npmInstall(cwd: string): Promise<void> {
+async function npmInstall(cwd: string, timeoutMs = 120_000): Promise<void> {
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
     const child = spawn("npm", ["install"], {
       cwd,
       stdio: "inherit",
     });
-
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
+    const timeout = setTimeout(() => {
+      if (settled) {
         return;
       }
 
-      reject(new HunchError(`npm install failed with exit code ${code}.`));
+      settled = true;
+      child.kill();
+      reject(new HunchError(`npm install timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+
+    function finish(error?: Error): void {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeout);
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    }
+
+    child.on("error", (error) => {
+      finish(new HunchError(`Failed to run npm install: ${error.message}`));
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        finish();
+        return;
+      }
+
+      finish(new HunchError(`npm install failed with exit code ${code}.`));
     });
   });
 }
