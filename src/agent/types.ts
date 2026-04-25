@@ -4,7 +4,10 @@ export interface SessionEvent {
   role: SessionRole;
   content: string;
   ts: string;
+  contentBlocks?: unknown;
+  isError?: boolean;
   toolName?: string;
+  toolUseId?: string;
   toolInput?: unknown;
   toolResult?: unknown;
 }

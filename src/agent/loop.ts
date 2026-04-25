@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type {
+  ContentBlockParam,
   MessageParam,
   ToolResultBlockParam,
   ToolUseBlock,
@@ -33,7 +34,16 @@ export interface RunAgentLoopOptions {
   spike: SpikeRef;
   message: string;
   verbose?: boolean;
+  maxToolIterations?: number;
 }
+
+interface ToolRunResult {
+  content: string;
+  isError: boolean;
+  rawResult?: unknown;
+}
+
+const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 
 export async function runAgentLoop(
   options: RunAgentLoopOptions,
@@ -58,14 +68,15 @@ export async function runAgentLoop(
     { role: "user", content: options.message } satisfies MessageParam,
   ];
   let finalText = "";
+  let toolIterations = 0;
+  const maxToolIterations =
+    options.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
 
   while (true) {
-    const response = await options.client.messages.create({
+    const response = await createMessage(options.client, {
       model: config.model,
-      max_tokens: 4096,
       system,
-      tools: toolDefinitions,
-      messages: [...messages],
+      messages,
     });
     const toolUses: ToolUseBlock[] = [];
 
@@ -73,6 +84,10 @@ export async function runAgentLoop(
       role: "assistant",
       content: response.content,
     });
+    await appendSessionEvent(
+      sessionFile,
+      assistantSessionEvent(response.content),
+    );
 
     for (const block of response.content) {
       if (block.type === "text") {
@@ -90,6 +105,13 @@ export async function runAgentLoop(
       break;
     }
 
+    toolIterations += 1;
+    if (toolIterations > maxToolIterations) {
+      throw new HunchError(
+        `Agent exceeded maximum tool iterations of ${maxToolIterations}.`,
+      );
+    }
+
     if (toolUses.length === 0) {
       throw new HunchError(
         "Anthropic requested tool use without a tool_use block.",
@@ -98,22 +120,25 @@ export async function runAgentLoop(
 
     const toolResults: ToolResultBlockParam[] = [];
     for (const toolUse of toolUses) {
-      const result = await dispatchTool(options.spike, toolUse);
+      const result = await runTool(options.spike, toolUse);
       await appendSessionEvent(sessionFile, {
-        ...sessionEvent("tool", stringifyToolResult(result)),
+        ...sessionEvent("tool", result.content),
+        isError: result.isError,
+        toolUseId: toolUse.id,
         toolName: toolUse.name,
         toolInput: toolUse.input,
-        toolResult: result,
+        toolResult: result.rawResult ?? result.content,
       });
       toolResults.push({
         type: "tool_result",
         tool_use_id: toolUse.id,
-        content: stringifyToolResult(result),
+        content: result.content,
+        ...(result.isError ? { is_error: true } : {}),
       });
 
       if (options.verbose) {
         process.stderr.write(
-          `[hunch] ${toolUse.name}: ${stringifyToolResult(result)}\n`,
+          `[hunch] ${toolUse.name}: ${result.content}\n`,
         );
       }
     }
@@ -122,19 +147,51 @@ export async function runAgentLoop(
       role: "user",
       content: toolResults,
     });
+
+    if (toolIterations >= maxToolIterations) {
+      throw new HunchError(
+        `Agent exceeded maximum tool iterations of ${maxToolIterations}.`,
+      );
+    }
   }
 
-  await appendSessionEvent(sessionFile, sessionEvent("assistant", finalText));
   return finalText;
 }
 
 function sessionEventsToMessages(events: SessionEvent[]): MessageParam[] {
   return events.flatMap((event) => {
+    if (event.role === "tool") {
+      if (event.toolUseId === undefined) {
+        return [];
+      }
+
+      return [
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: event.toolUseId,
+              content: event.content,
+              ...(event.isError ? { is_error: true } : {}),
+            },
+          ],
+        } satisfies MessageParam,
+      ];
+    }
+
     if (event.role !== "user" && event.role !== "assistant") {
       return [];
     }
 
-    return [{ role: event.role, content: event.content } satisfies MessageParam];
+    return [
+      {
+        role: event.role,
+        content: Array.isArray(event.contentBlocks)
+          ? (event.contentBlocks as ContentBlockParam[])
+          : event.content,
+      } satisfies MessageParam,
+    ];
   });
 }
 
@@ -147,6 +204,58 @@ function sessionEvent(
     content,
     ts: timestamp(),
   };
+}
+
+async function createMessage(
+  client: Anthropic,
+  input: { model: string; system: string; messages: MessageParam[] },
+) {
+  try {
+    return await client.messages.create({
+      model: input.model,
+      max_tokens: 4096,
+      system: input.system,
+      tools: toolDefinitions,
+      messages: [...input.messages],
+    });
+  } catch (error) {
+    throw new HunchError(`Anthropic request failed: ${errorMessage(error)}`);
+  }
+}
+
+function assistantSessionEvent(contentBlocks: ContentBlockParam[]): SessionEvent {
+  return {
+    ...sessionEvent("assistant", textFromContentBlocks(contentBlocks)),
+    contentBlocks,
+  };
+}
+
+function textFromContentBlocks(contentBlocks: ContentBlockParam[]): string {
+  return contentBlocks
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("");
+}
+
+async function runTool(
+  spike: SpikeRef,
+  toolUse: ToolUseBlock,
+): Promise<ToolRunResult> {
+  try {
+    const result = await dispatchTool(spike, {
+      ...toolUse,
+      input: validateToolInput(toolUse.name, toolUse.input),
+    });
+    return {
+      content: stringifyToolResult(result),
+      isError: false,
+      rawResult: result,
+    };
+  } catch (error) {
+    return {
+      content: `${toolUse.name} failed: ${errorMessage(error)}`,
+      isError: true,
+    };
+  }
 }
 
 async function dispatchTool(
@@ -184,4 +293,96 @@ function stringifyToolResult(result: unknown): string {
   }
 
   return JSON.stringify(result);
+}
+
+function validateToolInput(name: string, input: unknown): unknown {
+  const record = requireRecord(input, name);
+
+  switch (name) {
+    case "read_file":
+      return {
+        path: requireString(record, "path", name),
+      } satisfies ReadFileToolInput;
+    case "write_file":
+      return {
+        path: requireString(record, "path", name),
+        content: requireString(record, "content", name),
+      } satisfies WriteFileToolInput;
+    case "edit_file":
+      return {
+        path: requireString(record, "path", name),
+        old_str: requireString(record, "old_str", name),
+        new_str: requireString(record, "new_str", name),
+      } satisfies EditFileToolInput;
+    case "list_files": {
+      const depth = optionalNumber(record, "depth", name);
+      return {
+        ...(record.path === undefined
+          ? {}
+          : { path: requireString(record, "path", name) }),
+        ...(depth === undefined ? {} : { depth }),
+      } satisfies ListFilesToolInput;
+    }
+    case "run_shell":
+      return {
+        command: requireString(record, "command", name),
+      } satisfies RunShellToolInput;
+    case "decide":
+      return {
+        decision: requireString(record, "decision", name),
+        rationale: requireString(record, "rationale", name),
+      } satisfies Omit<DecisionInput, "ts">;
+    case "generate_seed_data":
+      requireString(record, "purpose", name);
+      return record;
+    case "push_back":
+      requireString(record, "request", name);
+      return record;
+    default:
+      throw new HunchError(`Unknown tool: ${name}`);
+  }
+}
+
+function requireRecord(value: unknown, toolName: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new HunchError(`${toolName}.input must be an object.`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function requireString(
+  record: Record<string, unknown>,
+  key: string,
+  toolName: string,
+): string {
+  if (typeof record[key] !== "string") {
+    throw new HunchError(`${toolName}.${key} must be a string.`);
+  }
+
+  if (record[key].length === 0) {
+    throw new HunchError(`${toolName}.${key} must not be blank.`);
+  }
+
+  return record[key];
+}
+
+function optionalNumber(
+  record: Record<string, unknown>,
+  key: string,
+  toolName: string,
+): number | undefined {
+  if (record[key] === undefined) {
+    return undefined;
+  }
+
+  if (typeof record[key] !== "number") {
+    throw new HunchError(`${toolName}.${key} must be a number.`);
+  }
+
+  return record[key];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

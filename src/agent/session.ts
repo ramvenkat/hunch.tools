@@ -94,6 +94,22 @@ function validateSessionEvent(
     );
   }
 
+  if ("toolUseId" in event && typeof event.toolUseId !== "string") {
+    throw invalidSessionEvent(
+      file,
+      lineNumber,
+      "toolUseId must be a string when present",
+    );
+  }
+
+  if ("isError" in event && typeof event.isError !== "boolean") {
+    throw invalidSessionEvent(
+      file,
+      lineNumber,
+      "isError must be a boolean when present",
+    );
+  }
+
   return event as unknown as SessionEvent;
 }
 

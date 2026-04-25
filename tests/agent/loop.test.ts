@@ -117,8 +117,21 @@ describe("runAgentLoop", () => {
     await expect(readSession(spike)).resolves.toEqual([
       expect.objectContaining({ role: "user", content: "Write a note" }),
       expect.objectContaining({
+        role: "assistant",
+        content: "",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "write_file",
+            input: { path: "notes.txt", content: "hello" },
+          },
+        ],
+      }),
+      expect.objectContaining({
         role: "tool",
         content: "Wrote notes.txt",
+        toolUseId: "toolu_1",
         toolName: "write_file",
         toolInput: { path: "notes.txt", content: "hello" },
         toolResult: "Wrote notes.txt",
@@ -130,8 +143,192 @@ describe("runAgentLoop", () => {
     ]);
   });
 
-  it("throws HunchError for unknown tools", async () => {
+  it("returns tool errors to Anthropic and lets the model recover", async () => {
     const spike = await makeSpike();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const client = fakeClient([
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_missing",
+            name: "read_file",
+            input: { path: "missing.txt" },
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      messageResponse({
+        content: [{ type: "text", text: "I could not read that file." }],
+        stopReason: "end_turn",
+      }),
+    ]);
+
+    const result = await runAgentLoop({
+      client,
+      spike,
+      message: "Read a missing file",
+    });
+
+    expect(result).toBe("I could not read that file.");
+    expect(client.messages.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          {
+            role: "user",
+            content: [
+              expect.objectContaining({
+                type: "tool_result",
+                tool_use_id: "toolu_missing",
+                is_error: true,
+                content: expect.stringContaining("read_file failed:"),
+              }),
+            ],
+          },
+        ]),
+      }),
+    );
+    await expect(readSession(spike)).resolves.toEqual([
+      expect.objectContaining({ role: "user", content: "Read a missing file" }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_missing",
+            name: "read_file",
+            input: { path: "missing.txt" },
+          },
+        ],
+      }),
+      expect.objectContaining({
+        role: "tool",
+        toolUseId: "toolu_missing",
+        toolName: "read_file",
+        isError: true,
+        content: expect.stringContaining("read_file failed:"),
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "I could not read that file.",
+      }),
+    ]);
+  });
+
+  it("returns malformed tool input as an error tool_result", async () => {
+    const spike = await makeSpike();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const client = fakeClient([
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_bad",
+            name: "write_file",
+            input: { path: "notes.txt" },
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      messageResponse({
+        content: [{ type: "text", text: "I need file content before writing." }],
+        stopReason: "end_turn",
+      }),
+    ]);
+
+    const result = await runAgentLoop({
+      client,
+      spike,
+      message: "Write an invalid note",
+    });
+
+    expect(result).toBe("I need file content before writing.");
+    expect(client.messages.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          {
+            role: "user",
+            content: [
+              expect.objectContaining({
+                type: "tool_result",
+                tool_use_id: "toolu_bad",
+                is_error: true,
+                content: "write_file failed: write_file.content must be a string.",
+              }),
+            ],
+          },
+        ]),
+      }),
+    );
+  });
+
+  it("stops after the configured maximum tool iterations", async () => {
+    const spike = await makeSpike();
+    const client = fakeClient([
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "list_files",
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_2",
+            name: "list_files",
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+    ]);
+
+    await expect(
+      runAgentLoop({
+        client,
+        spike,
+        message: "Loop tools",
+        maxToolIterations: 1,
+      }),
+    ).rejects.toEqual(
+      new HunchError("Agent exceeded maximum tool iterations of 1."),
+    );
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps Anthropic failures and still persists the user event", async () => {
+    const spike = await makeSpike();
+    const client = {
+      messages: {
+        create: vi.fn(async () => {
+          throw new Error("connection reset");
+        }),
+      },
+    } as unknown as Anthropic;
+
+    await expect(
+      runAgentLoop({ client, spike, message: "Hello?" }),
+    ).rejects.toEqual(
+      new HunchError("Anthropic request failed: connection reset"),
+    );
+
+    await expect(readSession(spike)).resolves.toEqual([
+      expect.objectContaining({ role: "user", content: "Hello?" }),
+    ]);
+  });
+
+  it("returns unknown tools as error tool_results", async () => {
+    const spike = await makeSpike();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const client = fakeClient([
       messageResponse({
         content: [
@@ -144,11 +341,37 @@ describe("runAgentLoop", () => {
         ],
         stopReason: "tool_use",
       }),
+      messageResponse({
+        content: [{ type: "text", text: "That tool is not available." }],
+        stopReason: "end_turn",
+      }),
     ]);
 
-    await expect(
-      runAgentLoop({ client, spike, message: "Use a mystery tool" }),
-    ).rejects.toEqual(new HunchError("Unknown tool: mystery_tool"));
+    const result = await runAgentLoop({
+      client,
+      spike,
+      message: "Use a mystery tool",
+    });
+
+    expect(result).toBe("That tool is not available.");
+    expect(client.messages.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          {
+            role: "user",
+            content: [
+              expect.objectContaining({
+                type: "tool_result",
+                tool_use_id: "toolu_unknown",
+                is_error: true,
+                content: "mystery_tool failed: Unknown tool: mystery_tool",
+              }),
+            ],
+          },
+        ]),
+      }),
+    );
   });
 });
 
