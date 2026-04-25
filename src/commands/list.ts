@@ -1,11 +1,13 @@
-import { getActiveSpike, listSpikes } from "../state/spike.js";
 import { loadConfig } from "../state/config.js";
-import { HunchError } from "../utils/errors.js";
+import type { PathResolverOptions } from "../state/paths.js";
+import { getActiveSpikeName, listSpikes } from "../state/spike.js";
 import { out } from "../ui/output.js";
 
-export async function listCommand(): Promise<void> {
-  const config = await loadConfig();
-  const spikes = await listSpikes();
+export async function listCommand(
+  options: PathResolverOptions = {},
+): Promise<void> {
+  const config = await loadConfig(options);
+  const spikes = await listSpikes(options);
 
   if (spikes.length === 0) {
     out.info(
@@ -14,23 +16,8 @@ export async function listCommand(): Promise<void> {
     return;
   }
 
-  const activeName = await readActiveName();
+  const activeName = await getActiveSpikeName(options);
   for (const spike of spikes) {
     out.info(`${spike.name}${spike.name === activeName ? " [active]" : ""}`);
-  }
-}
-
-async function readActiveName(): Promise<string | undefined> {
-  try {
-    return (await getActiveSpike()).name;
-  } catch (error) {
-    if (
-      error instanceof HunchError &&
-      error.message.startsWith("No active spike.")
-    ) {
-      return undefined;
-    }
-
-    throw error;
   }
 }

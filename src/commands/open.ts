@@ -1,12 +1,16 @@
 import { stat } from "node:fs/promises";
 
 import { loadConfig } from "../state/config.js";
+import type { PathResolverOptions } from "../state/paths.js";
 import { setActiveSpike, spikeRef } from "../state/spike.js";
 import { out } from "../ui/output.js";
 import { HunchError } from "../utils/errors.js";
 
-export async function openCommand(name: string): Promise<void> {
-  const config = await loadConfig();
+export async function openCommand(
+  name: string,
+  options: PathResolverOptions = {},
+): Promise<void> {
+  const config = await loadConfig(options);
   const spike = spikeRef(config.spikeDir, name);
 
   const spikeStats = await stat(spike.dir).catch(
@@ -23,6 +27,6 @@ export async function openCommand(name: string): Promise<void> {
     throw new HunchError(`Spike not found: ${name}`);
   }
 
-  await setActiveSpike(name);
+  await setActiveSpike(name, options);
   out.success(`Active spike: ${name}`);
 }

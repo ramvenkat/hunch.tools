@@ -73,6 +73,30 @@ export async function getActiveSpike(
   return spikeRef(config.spikeDir, active);
 }
 
+export async function getActiveSpikeName(
+  options: PathResolverOptions = {},
+): Promise<string | undefined> {
+  const paths = createPathResolver(options);
+  let active: string;
+
+  try {
+    active = (await readFile(paths.activePath, "utf8")).trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+
+  if (!active) {
+    return undefined;
+  }
+
+  validateSpikeName(active);
+  return active;
+}
+
 export function buildSpikeName(slug: string, date = new Date()): string {
   return `${todayStamp(date)}-${slug}`;
 }
