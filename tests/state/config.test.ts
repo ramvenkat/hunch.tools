@@ -48,4 +48,79 @@ describe("loadConfig", () => {
       logDecisions: false,
     });
   });
+
+  it("expands home-relative spike directories", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      "spike_dir: ~/research-spikes\n",
+    );
+
+    const config = await loadConfig({ homeDir, cwd: "/repo" });
+
+    expect(config.spikeDir).toBe(join(homeDir, "research-spikes"));
+  });
+
+  it("reads nested agent options", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      [
+        "agent:",
+        "  push_back_on_scope_creep: false",
+        "  log_decisions: false",
+        "",
+      ].join("\n"),
+    );
+
+    const config = await loadConfig({ homeDir, cwd: "/repo" });
+
+    expect(config.pushBackOnScopeCreep).toBe(false);
+    expect(config.logDecisions).toBe(false);
+  });
+
+  it("rejects unsupported providers", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), "provider: openai\n");
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: provider/,
+    );
+  });
+
+  it("rejects invalid boolean agent flags", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      ["agent:", "  log_decisions: sometimes", ""].join("\n"),
+    );
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: agent.log_decisions/,
+    );
+  });
+
+  it("rejects non-string scalar overrides", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), "model: 123\n");
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: model/,
+    );
+  });
+
+  it("rejects non-object agent config", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), "agent: false\n");
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: agent/,
+    );
+  });
 });

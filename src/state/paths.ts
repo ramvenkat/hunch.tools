@@ -21,7 +21,7 @@ export function createPathResolver(
   options: PathResolverOptions = {},
 ): PathResolver {
   const homeDir = options.homeDir ?? os.homedir();
-  const repoRoot = options.cwd ?? process.cwd();
+  const repoRoot = path.resolve(options.cwd ?? process.cwd());
   const hunchDir = path.join(homeDir, ".hunch");
 
   return {

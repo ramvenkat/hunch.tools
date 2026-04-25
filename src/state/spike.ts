@@ -4,7 +4,11 @@ import path from "node:path";
 import { HunchError } from "../utils/errors.js";
 import { todayStamp } from "../utils/time.js";
 import { loadConfig } from "./config.js";
-import { createPathResolver, type PathResolverOptions } from "./paths.js";
+import {
+  assertInside,
+  createPathResolver,
+  type PathResolverOptions,
+} from "./paths.js";
 
 export interface SpikeRef {
   name: string;
@@ -38,6 +42,7 @@ export async function setActiveSpike(
   options: PathResolverOptions = {},
 ): Promise<void> {
   const paths = createPathResolver(options);
+  validateSpikeName(name);
   await mkdir(paths.hunchDir, { recursive: true });
   await writeFile(paths.activePath, `${name}\n`, "utf8");
 }
@@ -73,7 +78,8 @@ export function buildSpikeName(slug: string, date = new Date()): string {
 }
 
 export function spikeRef(spikeDir: string, name: string): SpikeRef {
-  const dir = path.join(spikeDir, name);
+  validateSpikeName(name);
+  const dir = assertInside(spikeDir, path.join(spikeDir, name));
 
   return {
     name,
@@ -81,4 +87,26 @@ export function spikeRef(spikeDir: string, name: string): SpikeRef {
     appDir: path.join(dir, "app"),
     hunchDir: path.join(dir, ".hunch"),
   };
+}
+
+function validateSpikeName(name: string): void {
+  if (name.trim().length === 0) {
+    throw invalidSpikeName("must not be empty");
+  }
+
+  if (name.trim() !== name) {
+    throw invalidSpikeName("must not contain leading or trailing whitespace");
+  }
+
+  if (name === "." || name === "..") {
+    throw invalidSpikeName("must not be . or ..");
+  }
+
+  if (name.includes("/") || name.includes("\\")) {
+    throw invalidSpikeName("must not contain path separators");
+  }
+}
+
+function invalidSpikeName(reason: string): HunchError {
+  return new HunchError(`Invalid spike name: ${reason}.`);
 }

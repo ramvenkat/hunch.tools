@@ -18,12 +18,12 @@ describe("assertInside", () => {
 
 describe("createPathResolver", () => {
   it("builds Hunch paths from the provided home and cwd", () => {
-    const paths = createPathResolver({ homeDir: "/home/ram", cwd: "/repo" });
+    const paths = createPathResolver({ homeDir: "/home/ram", cwd: "/repo/.." });
 
     expect(paths.hunchDir).toBe("/home/ram/.hunch");
     expect(paths.configPath).toBe("/home/ram/.hunch/config.yaml");
     expect(paths.activePath).toBe("/home/ram/.hunch/active");
     expect(paths.defaultSpikeDir).toBe("/home/ram/hunches");
-    expect(paths.repoRoot).toBe("/repo");
+    expect(paths.repoRoot).toBe("/");
   });
 });
