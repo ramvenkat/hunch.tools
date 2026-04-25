@@ -4,7 +4,11 @@ import { select as promptSelect } from "@inquirer/prompts";
 
 import type { PathResolverOptions } from "../state/paths.js";
 import { getActiveSpike } from "../state/spike.js";
-import { markDecision, type DecisionStatus } from "../tools/ux-decisions.js";
+import {
+  markDecision,
+  parseDecisionEntries,
+  type DecisionStatus,
+} from "../tools/ux-decisions.js";
 import { out } from "../ui/output.js";
 
 type DecisionChoice = DecisionStatus | "skip";
@@ -29,10 +33,14 @@ export async function decideCommand(
     return;
   }
 
-  const pendingDecisions = parsePendingDecisionTitles(text);
+  const decisions = parseDecisionEntries(text);
+  const pendingDecisions = decisions
+    .filter((decision) => decision.status === "pending")
+    .map((decision) => decision.title);
+
   if (pendingDecisions.length === 0) {
     out.info(
-      hasDecisionSections(text)
+      decisions.length > 0
         ? "No pending UX decisions."
         : "No UX decisions logged yet.",
     );
@@ -69,36 +77,6 @@ async function readDecisionFile(file: string): Promise<string | undefined> {
 
     throw error;
   }
-}
-
-function parsePendingDecisionTitles(text: string): string[] {
-  return parseDecisionSections(text)
-    .filter((section) => section.status === "pending")
-    .map((section) => section.title);
-}
-
-function hasDecisionSections(text: string): boolean {
-  return parseDecisionSections(text).length > 0;
-}
-
-function parseDecisionSections(text: string): Array<{
-  title: string;
-  status: DecisionStatus | "pending";
-}> {
-  const entryPattern =
-    /^## ([^\r\n]+)\n\nStatus: (pending|approved|superseded|removed)\nTime: ([^\r\n]+)$/gm;
-  const sections: Array<{ title: string; status: DecisionStatus | "pending" }> =
-    [];
-  let match: RegExpExecArray | null;
-
-  while ((match = entryPattern.exec(text)) !== null) {
-    sections.push({
-      title: match[1] ?? "",
-      status: (match[2] ?? "pending") as DecisionStatus | "pending",
-    });
-  }
-
-  return sections;
 }
 
 async function defaultSelectDecision(

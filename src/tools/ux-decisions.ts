@@ -14,10 +14,22 @@ export interface DecisionInput {
 interface DecisionSection {
   title: string;
   status: StoredDecisionStatus;
+  time: string;
+  rationale: string;
   start: number;
   end: number;
   statusStart: number;
   statusEnd: number;
+  rationaleStart: number;
+}
+
+export interface DecisionEntry {
+  title: string;
+  status: StoredDecisionStatus;
+  time: string;
+  rationale: string;
+  start: number;
+  end: number;
 }
 
 export async function appendDecision(
@@ -90,6 +102,19 @@ export async function markDecision(
   return `Marked decision ${status}: ${decision}`;
 }
 
+export function parseDecisionEntries(content: string): DecisionEntry[] {
+  return parseDecisionSections(content).map(
+    ({ title, status, time, rationale, start, end }) => ({
+      title,
+      status,
+      time,
+      rationale,
+      start,
+      end,
+    }),
+  );
+}
+
 function validateDecisionTitle(decision: string): void {
   if (decision.includes("\n") || decision.includes("\r")) {
     throw new HunchError("Decision title must be a single line.");
@@ -111,40 +136,70 @@ async function readExistingFile(file: string): Promise<string> {
   }
 }
 
-function findDecisionSections(content: string, decision: string): DecisionSection[] {
+function findDecisionSections(
+  content: string,
+  decision: string,
+): DecisionSection[] {
+  return parseDecisionSections(content).filter(
+    (section) => section.title === decision,
+  );
+}
+
+function parseDecisionSections(content: string): DecisionSection[] {
   const entryPattern =
     /^## ([^\r\n]+)\n\nStatus: (pending|approved|superseded|removed)\nTime: ([^\r\n]+)$/gm;
   const sections: DecisionSection[] = [];
-  const allSections: DecisionSection[] = [];
   let match: RegExpExecArray | null;
 
   while ((match = entryPattern.exec(content)) !== null) {
     const title = match[1] ?? "";
     const status = (match[2] ?? "pending") as StoredDecisionStatus;
+    const time = match[3] ?? "";
     const statusPrefix = `## ${title}\n\nStatus: `;
     const statusStart = match.index + statusPrefix.length;
+    const rationaleStart = entryPattern.lastIndex + 2;
 
-    allSections.push({
+    sections.push({
       title,
       status,
+      time,
+      rationale: "",
       start: match.index,
       end: content.length,
       statusStart,
       statusEnd: statusStart + status.length,
+      rationaleStart,
     });
   }
 
-  for (let index = 0; index < allSections.length; index += 1) {
-    const section = allSections[index];
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
     if (section === undefined) {
       continue;
     }
 
-    section.end = allSections[index + 1]?.start ?? content.length;
-    if (section.title === decision) {
-      sections.push(section);
-    }
+    section.end = sections[index + 1]?.start ?? content.length;
+    section.rationale = content
+      .slice(section.rationaleStart, section.end)
+      .replace(/\n+$/, "");
   }
 
+  assertNoMalformedDecisionHeadings(content, sections);
+
   return sections;
+}
+
+function assertNoMalformedDecisionHeadings(
+  content: string,
+  sections: DecisionSection[],
+): void {
+  const firstSectionStart = sections[0]?.start ?? content.length;
+  const uncheckedPrefix = content.slice(0, firstSectionStart);
+  const malformedHeading = /^## ([^\r\n]+)$/m.exec(uncheckedPrefix);
+
+  if (malformedHeading !== null) {
+    throw new HunchError(
+      `Malformed UX decision entry: ${malformedHeading[1]}. Expected Status and Time metadata after the heading.`,
+    );
+  }
 }

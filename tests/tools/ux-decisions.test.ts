@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   appendDecision,
   markDecision,
+  parseDecisionEntries,
 } from "../../src/tools/ux-decisions.js";
 
 async function makeDecisionFile(): Promise<string> {
@@ -66,6 +67,66 @@ describe("appendDecision", () => {
         ts: "2026-04-25T01:00:00.000Z",
       }),
     ).rejects.toThrow("Pending decision already exists: Use cards");
+  });
+});
+
+describe("parseDecisionEntries", () => {
+  it("returns valid decision entries with rationale bounds", () => {
+    const content = [
+      "## Use cards",
+      "",
+      "Status: pending",
+      "Time: 2026-04-25T00:00:00.000Z",
+      "",
+      "They invite comparison.",
+      "",
+      "## Use tabs",
+      "",
+      "Status: approved",
+      "Time: 2026-04-25T01:00:00.000Z",
+      "",
+      "They separate flows.",
+      "",
+    ].join("\n");
+
+    expect(parseDecisionEntries(content)).toEqual([
+      expect.objectContaining({
+        title: "Use cards",
+        status: "pending",
+        time: "2026-04-25T00:00:00.000Z",
+        rationale: "They invite comparison.",
+      }),
+      expect.objectContaining({
+        title: "Use tabs",
+        status: "approved",
+        time: "2026-04-25T01:00:00.000Z",
+        rationale: "They separate flows.",
+      }),
+    ]);
+  });
+
+  it("rejects malformed decision-looking sections", () => {
+    expect(() =>
+      parseDecisionEntries("## Broken\n\nMissing metadata.\n"),
+    ).toThrow("Malformed UX decision entry: Broken");
+  });
+
+  it("does not treat rationale headings as decision entries", () => {
+    const content = [
+      "## Use cards",
+      "",
+      "Status: pending",
+      "Time: 2026-04-25T00:00:00.000Z",
+      "",
+      "They invite comparison.",
+      "",
+      "## Fake heading",
+      "",
+      "More rationale.",
+      "",
+    ].join("\n");
+
+    expect(parseDecisionEntries(content)).toHaveLength(1);
   });
 });
 
