@@ -26,12 +26,8 @@ export function buildCli(): Command {
 }
 
 export async function runCli(argv = process.argv): Promise<void> {
-  await buildCli().parseAsync(argv);
-}
-
-async function main(): Promise<void> {
   try {
-    await runCli();
+    await buildCli().parseAsync(argv);
   } catch (error) {
     if (error instanceof HunchError) {
       out.error(error.message);
@@ -44,5 +40,5 @@ async function main(): Promise<void> {
 }
 
 if (fileURLToPath(import.meta.url) === process.argv[1]) {
-  await main();
+  await runCli();
 }
