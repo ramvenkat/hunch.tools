@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 
 import { askCommand } from "./commands/ask.js";
+import { decideCommand } from "./commands/decide.js";
 import { listCommand } from "./commands/list.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
@@ -57,6 +58,11 @@ export function buildCli(options: PathResolverOptions = {}): Command {
           ...commandOptions,
         }),
     );
+
+  program
+    .command("decide")
+    .description("Review UX decisions for the active spike.")
+    .action(() => decideCommand(options));
 
   return program;
 }
