@@ -15,6 +15,10 @@ export function buildCli(): Command {
   return program;
 }
 
+export async function runCli(argv = process.argv): Promise<void> {
+  await buildCli().parseAsync(argv);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await buildCli().parseAsync(process.argv);
+  await runCli();
 }
