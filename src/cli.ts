@@ -7,6 +7,7 @@ import { listCommand } from "./commands/list.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
 import { runCommand } from "./commands/run.js";
+import { showCommand } from "./commands/show.js";
 import type { PathResolverOptions } from "./state/paths.js";
 import { out } from "./ui/output.js";
 import { HunchError } from "./utils/errors.js";
@@ -63,6 +64,11 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .command("decide")
     .description("Review UX decisions for the active spike.")
     .action(() => decideCommand(options));
+
+  program
+    .command("show")
+    .description("Prepare the active spike for a customer interview.")
+    .action(() => showCommand(options));
 
   return program;
 }

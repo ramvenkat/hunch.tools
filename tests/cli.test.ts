@@ -18,7 +18,15 @@ describe("buildCli", () => {
 
     expect(cli.name()).toBe("hunch");
     expect(cli.commands.map((command) => command.name())).toEqual(
-      expect.arrayContaining(["new", "list", "open", "run", "ask", "decide"]),
+      expect.arrayContaining([
+        "new",
+        "list",
+        "open",
+        "run",
+        "ask",
+        "decide",
+        "show",
+      ]),
     );
   });
 });
