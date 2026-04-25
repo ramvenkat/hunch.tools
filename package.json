@@ -13,10 +13,11 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/prompts && cp src/prompts/*.md dist/prompts/",
+    "build": "tsc -p tsconfig.json && node scripts/copy-prompts.mjs",
     "dev": "tsx src/cli.ts",
     "prepack": "npm run build",
     "test": "vitest run",
+    "test:built-prompts": "npm run build && node scripts/smoke-built-prompts.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
