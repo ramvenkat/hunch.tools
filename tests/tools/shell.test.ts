@@ -18,9 +18,9 @@ describe("isAllowedShellCommand", () => {
     expect(isAllowedShellCommand("npm run test:unit")).toBe(false);
   });
 
-  it("allows selected shadcn add commands", () => {
-    expect(isAllowedShellCommand("npx shadcn@latest add button")).toBe(true);
-    expect(isAllowedShellCommand("npx shadcn add dialog")).toBe(true);
+  it("rejects shadcn add commands because they execute package-manager code", () => {
+    expect(isAllowedShellCommand("npx shadcn@latest add button")).toBe(false);
+    expect(isAllowedShellCommand("npx shadcn add dialog")).toBe(false);
   });
 
   it("rejects dangerous or network commands", () => {

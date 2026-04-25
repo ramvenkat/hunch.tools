@@ -56,8 +56,12 @@ describe("runCommand", () => {
     await running;
 
     expect(spawn).toHaveBeenCalledWith(
-      "npm",
-      ["run", "dev", "--", "--host", "127.0.0.1"],
+      process.execPath,
+      [
+        join(appDir, "node_modules", "vite", "bin", "vite.js"),
+        "--host",
+        "127.0.0.1",
+      ],
       expect.objectContaining({
         cwd: appDir,
         env: expect.objectContaining({ VITE_HUNCH_DEMO: "1" }),
@@ -85,10 +89,10 @@ describe("runCommand", () => {
 
     const running = runCommand({ homeDir, cwd: "/repo" });
     await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
-    child.emit("error", new Error("npm missing"));
+    child.emit("error", new Error("vite missing"));
 
     await expect(running).rejects.toEqual(
-      new HunchError("Failed to start dev server: npm missing"),
+      new HunchError("Failed to start dev server: vite missing"),
     );
     expect(spinner.fail).toHaveBeenCalledWith("Failed to start dev server.");
     expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
@@ -217,6 +221,36 @@ describe("runCommand", () => {
     expect(stdout).toHaveBeenCalledWith("http://127.0.0.1:5173\n");
     expect(open).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith("http://127.0.0.1:5173");
+  });
+
+  it("strips secrets from the dev server environment", async () => {
+    spinner.start.mockReturnValue(spinner);
+    const previous = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "secret-value";
+    const { child, homeDir } = await setupActiveRun();
+
+    try {
+      const running = runCommand({ homeDir, cwd: "/repo" });
+      await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+      child.emit("exit", 0, null);
+      await running;
+    } finally {
+      if (previous === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = previous;
+      }
+    }
+
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.not.objectContaining({
+          ANTHROPIC_API_KEY: "secret-value",
+        }),
+      }),
+    );
   });
 });
 

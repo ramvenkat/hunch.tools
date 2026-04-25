@@ -14,7 +14,6 @@ export interface RunShellToolOptions {
 }
 
 const NPM_INSTALL = "npm install";
-const SHADCN_ADD_PATTERN = /^npx shadcn(?:@[a-zA-Z0-9._-]+)? add [a-zA-Z0-9:_-]+$/;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_OUTPUT_CAP_BYTES = 200 * 1024;
 const SAFE_ENV_KEYS = [
@@ -32,10 +31,7 @@ const SAFE_ENV_KEYS = [
 
 export function isAllowedShellCommand(command: string): boolean {
   const trimmed = command.trim();
-  return (
-    trimmed === NPM_INSTALL ||
-    SHADCN_ADD_PATTERN.test(trimmed)
-  );
+  return trimmed === NPM_INSTALL;
 }
 
 function parseAllowedCommand(command: string): [string, string[]] {

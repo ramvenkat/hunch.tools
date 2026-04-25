@@ -88,8 +88,7 @@ export const toolDefinitions = [
         command: {
           type: "string",
           minLength: 1,
-          pattern:
-            "^(npm install|npx shadcn(@[a-zA-Z0-9._-]+)? add [a-zA-Z0-9:_-]+)$",
+          pattern: "^npm install$",
           description: "Allowlisted shell command to run.",
         },
       },

@@ -112,7 +112,7 @@ The agent tools are deliberately narrow:
 - `generate_seed_data`: create realistic demo content for the spike.
 - `push_back`: classify scope creep against the current journey.
 
-Every file path is resolved and checked to stay inside the active spike directory. `run_shell` only permits commands needed for v0.1 prototype workflows, such as `npm install`, `npm run *`, and selected `npx shadcn` commands.
+Every file path is resolved and checked to stay inside the active spike directory. `run_shell` only permits commands needed for v0.1 prototype workflows. Package-script execution is treated as untrusted because the agent can edit app files, so the shell tool permits `npm install` only with lifecycle scripts disabled.
 
 ## Data Flow
 

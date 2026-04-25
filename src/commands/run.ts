@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
 import open from "open";
 import ora from "ora";
 
@@ -17,6 +18,19 @@ export interface DevServerHandle {
   wait: Promise<void>;
 }
 
+const SAFE_DEV_SERVER_ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "SystemRoot",
+  "WINDIR",
+  "COMSPEC",
+  "USERPROFILE",
+  "PATHEXT",
+] as const;
+
 export async function runCommand(
   options: RunCommandOptions = {},
 ): Promise<void> {
@@ -29,16 +43,20 @@ export async function startDevServer(
 ): Promise<DevServerHandle> {
   const spike = await getActiveSpike(options);
   const spinner = ora(`Starting dev server for ${spike.name}...`).start();
-  const env = { ...process.env };
+  const env = buildDevServerEnv();
   if (options.demo) {
     env.VITE_HUNCH_DEMO = "1";
   }
 
-  const child = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1"], {
-    cwd: spike.appDir,
-    env,
-    stdio: ["inherit", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    [viteBin(spike.appDir), "--host", "127.0.0.1"],
+    {
+      cwd: spike.appDir,
+      env,
+      stdio: ["inherit", "pipe", "pipe"],
+    },
+  );
 
   let opened = false;
   const openWhenReady = async (chunk: Buffer): Promise<void> => {
@@ -160,4 +178,21 @@ export async function startDevServer(
 
 function interruptedError(): HunchError {
   return new HunchError("Interrupted.", 130);
+}
+
+function viteBin(appDir: string): string {
+  return path.join(appDir, "node_modules", "vite", "bin", "vite.js");
+}
+
+function buildDevServerEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+
+  for (const key of SAFE_DEV_SERVER_ENV_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+
+  return env;
 }
