@@ -41,6 +41,14 @@ describe("runShellTool", () => {
     ).rejects.toThrow(/Shell command is not allowlisted/);
   });
 
+  it("rejects cwd values that are not existing directories", async () => {
+    await expect(
+      runShellTool(join(tmpdir(), "hunch-missing-dir"), {
+        command: "npm run build",
+      }),
+    ).rejects.toThrow(/cwd must be an existing directory/);
+  });
+
   it("runs allowlisted commands and returns trimmed output", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
     await writeFile(
@@ -73,5 +81,67 @@ describe("runShellTool", () => {
     await expect(runShellTool(cwd, { command: "npm run fail" })).rejects.toThrow(
       /Shell command failed with exit code 7[\s\S]*bad news/,
     );
+  });
+
+  it("does not expose secret environment variables to scripts", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
+    await writeFile(
+      join(cwd, "package.json"),
+      JSON.stringify({
+        scripts: {
+          envcheck:
+            "node -e \"console.log(process.env.ANTHROPIC_API_KEY || 'missing')\"",
+        },
+      }),
+      "utf8",
+    );
+    const previous = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "secret-value";
+
+    try {
+      await expect(
+        runShellTool(cwd, { command: "npm run envcheck" }),
+      ).resolves.toContain("missing");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.ANTHROPIC_API_KEY = previous;
+      }
+    }
+  });
+
+  it("times out long-running commands", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
+    await writeFile(
+      join(cwd, "package.json"),
+      JSON.stringify({
+        scripts: {
+          slow: "node -e \"setTimeout(() => console.log('late'), 1000)\"",
+        },
+      }),
+      "utf8",
+    );
+
+    await expect(
+      runShellTool(cwd, { command: "npm run slow" }, { timeoutMs: 50 }),
+    ).rejects.toThrow(/timed out/);
+  });
+
+  it("rejects commands that exceed the output cap", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
+    await writeFile(
+      join(cwd, "package.json"),
+      JSON.stringify({
+        scripts: {
+          noisy: "node -e \"console.log('x'.repeat(200))\"",
+        },
+      }),
+      "utf8",
+    );
+
+    await expect(
+      runShellTool(cwd, { command: "npm run noisy" }, { outputCapBytes: 100 }),
+    ).rejects.toThrow(/output exceeded/);
   });
 });

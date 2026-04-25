@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertInside } from "../state/paths.js";
@@ -25,6 +25,8 @@ export interface ListFilesToolInput {
 }
 
 const SKIPPED_DIRS = new Set(["node_modules", "dist"]);
+const DEFAULT_LIST_DEPTH = 2;
+const MAX_LIST_ENTRIES = 1000;
 
 function comparePath(a: string, b: string): number {
   if (a < b) {
@@ -36,8 +38,62 @@ function comparePath(a: string, b: string): number {
   return 0;
 }
 
-function resolveInside(root: string, requestedPath: string): string {
-  return assertInside(root, path.resolve(root, requestedPath));
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await lstat(filePath);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function assertNoSymlinks(
+  root: string,
+  candidate: string,
+  allowMissingLeaf: boolean,
+): Promise<void> {
+  const relative = path.relative(path.resolve(root), candidate);
+  const parts = relative === "" ? [] : relative.split(path.sep);
+  let currentPath = path.resolve(root);
+
+  for (let index = 0; index < parts.length; index += 1) {
+    currentPath = path.join(currentPath, parts[index] ?? "");
+    const isLeaf = index === parts.length - 1;
+
+    if (!(await pathExists(currentPath))) {
+      if (allowMissingLeaf && isLeaf) {
+        return;
+      }
+      if (allowMissingLeaf && !(await pathExists(path.dirname(currentPath)))) {
+        return;
+      }
+      continue;
+    }
+
+    const stats = await lstat(currentPath);
+    if (stats.isSymbolicLink()) {
+      throw new HunchError(
+        `Symlinks are not allowed: ${toRelativePath(root, currentPath)}`,
+      );
+    }
+  }
+}
+
+async function resolveInside(
+  root: string,
+  requestedPath: string,
+  options: { allowMissingLeaf?: boolean } = {},
+): Promise<string> {
+  if (path.isAbsolute(requestedPath)) {
+    throw new HunchError(`Tool paths must be relative: ${requestedPath}`);
+  }
+
+  const resolved = assertInside(root, path.resolve(root, requestedPath));
+  await assertNoSymlinks(root, resolved, options.allowMissingLeaf ?? false);
+  return resolved;
 }
 
 function toRelativePath(root: string, filePath: string): string {
@@ -64,7 +120,7 @@ export async function readFileTool(
   root: string,
   input: ReadFileToolInput,
 ): Promise<string> {
-  const filePath = resolveInside(root, input.path);
+  const filePath = await resolveInside(root, input.path);
   return readFile(filePath, "utf8");
 }
 
@@ -72,7 +128,9 @@ export async function writeFileTool(
   root: string,
   input: WriteFileToolInput,
 ): Promise<string> {
-  const filePath = resolveInside(root, input.path);
+  const filePath = await resolveInside(root, input.path, {
+    allowMissingLeaf: true,
+  });
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, input.content, "utf8");
   return `Wrote ${input.path}`;
@@ -82,7 +140,7 @@ export async function editFileTool(
   root: string,
   input: EditFileToolInput,
 ): Promise<string> {
-  const filePath = resolveInside(root, input.path);
+  const filePath = await resolveInside(root, input.path);
   const content = await readFile(filePath, "utf8");
   const matches = countOccurrences(content, input.old_str);
 
@@ -100,8 +158,15 @@ export async function listFilesTool(
   root: string,
   input: ListFilesToolInput,
 ): Promise<string[]> {
-  const startPath = resolveInside(root, input.path ?? ".");
-  const maxDepth = input.depth ?? Number.POSITIVE_INFINITY;
+  if (
+    input.depth !== undefined &&
+    (!Number.isInteger(input.depth) || input.depth < 0)
+  ) {
+    throw new HunchError("list_files depth must be a non-negative integer.");
+  }
+
+  const startPath = await resolveInside(root, input.path ?? ".");
+  const maxDepth = input.depth ?? DEFAULT_LIST_DEPTH;
   const files: string[] = [];
 
   async function visit(currentPath: string, remainingDepth: number): Promise<void> {
@@ -117,6 +182,11 @@ export async function listFilesTool(
 
       if (entry.isFile()) {
         files.push(toRelativePath(root, childPath));
+        if (files.length > MAX_LIST_ENTRIES) {
+          throw new HunchError(
+            `list_files exceeded maximum entry count of ${MAX_LIST_ENTRIES}.`,
+          );
+        }
         continue;
       }
 

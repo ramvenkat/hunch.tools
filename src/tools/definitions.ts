@@ -1,3 +1,12 @@
+import type { Tool } from "@anthropic-ai/sdk/resources/messages/messages";
+
+const RELATIVE_PATH_SCHEMA = {
+  type: "string",
+  minLength: 1,
+  pattern: "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+",
+  description: "Relative path within the spike root.",
+} as const;
+
 export const toolDefinitions = [
   {
     name: "read_file",
@@ -5,12 +14,10 @@ export const toolDefinitions = [
     input_schema: {
       type: "object",
       properties: {
-        path: {
-          type: "string",
-          description: "Path to read, relative to the spike root.",
-        },
+        path: RELATIVE_PATH_SCHEMA,
       },
       required: ["path"],
+      additionalProperties: false,
     },
   },
   {
@@ -19,16 +26,14 @@ export const toolDefinitions = [
     input_schema: {
       type: "object",
       properties: {
-        path: {
-          type: "string",
-          description: "Path to write, relative to the spike root.",
-        },
+        path: RELATIVE_PATH_SCHEMA,
         content: {
           type: "string",
           description: "Complete file contents.",
         },
       },
       required: ["path", "content"],
+      additionalProperties: false,
     },
   },
   {
@@ -37,12 +42,10 @@ export const toolDefinitions = [
     input_schema: {
       type: "object",
       properties: {
-        path: {
-          type: "string",
-          description: "Path to edit, relative to the spike root.",
-        },
+        path: RELATIVE_PATH_SCHEMA,
         old_str: {
           type: "string",
+          minLength: 1,
           description: "Text to replace. Must occur exactly once.",
         },
         new_str: {
@@ -51,6 +54,7 @@ export const toolDefinitions = [
         },
       },
       required: ["path", "old_str", "new_str"],
+      additionalProperties: false,
     },
   },
   {
@@ -59,15 +63,15 @@ export const toolDefinitions = [
     input_schema: {
       type: "object",
       properties: {
-        path: {
-          type: "string",
-          description: "Directory to list, relative to the spike root.",
-        },
+        path: RELATIVE_PATH_SCHEMA,
         depth: {
-          type: "number",
+          type: "integer",
+          minimum: 0,
+          maximum: 10,
           description: "Maximum directory depth to traverse.",
         },
       },
+      additionalProperties: false,
     },
   },
   {
@@ -78,10 +82,14 @@ export const toolDefinitions = [
       properties: {
         command: {
           type: "string",
+          minLength: 1,
+          pattern:
+            "^(npm install|npm run [a-zA-Z0-9:_-]+|npx shadcn(@[a-zA-Z0-9._-]+)? add [a-zA-Z0-9:_-]+)$",
           description: "Allowlisted shell command to run.",
         },
       },
       required: ["command"],
+      additionalProperties: false,
     },
   },
-] as const;
+] satisfies Tool[];
