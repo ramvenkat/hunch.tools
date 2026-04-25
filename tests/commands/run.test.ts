@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import open from "open";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runCommand } from "../../src/commands/run.js";
+import { runCommand, startDevServer } from "../../src/commands/run.js";
 import { HunchError } from "../../src/utils/errors.js";
 
 vi.mock("node:child_process", () => ({
@@ -217,6 +217,22 @@ describe("runCommand", () => {
     expect(stdout).toHaveBeenCalledWith("http://127.0.0.1:5173\n");
     expect(open).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith("http://127.0.0.1:5173");
+  });
+});
+
+describe("startDevServer", () => {
+  it("returns a handle that stops the child server and resolves the wait", async () => {
+    spinner.start.mockReturnValue(spinner);
+    const { child, homeDir } = await setupActiveRun();
+
+    const server = await startDevServer({ homeDir, cwd: "/repo", demo: true });
+    const waiting = server.wait;
+
+    server.stop();
+    child.emit("exit", null, "SIGINT");
+
+    await expect(waiting).resolves.toBeUndefined();
+    expect(child.kill).toHaveBeenCalledWith("SIGINT");
   });
 });
 

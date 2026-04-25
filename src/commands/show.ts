@@ -8,9 +8,14 @@ import { loadPrompt } from "../agent/prompts.js";
 import { loadConfig } from "../state/config.js";
 import type { PathResolverOptions } from "../state/paths.js";
 import { getActiveSpike } from "../state/spike.js";
+import { parseSeedDataJson, type SeedData } from "../tools/seed-data.js";
 import { out } from "../ui/output.js";
 import { HunchError } from "../utils/errors.js";
-import { runCommand, type RunCommandOptions } from "./run.js";
+import {
+  startDevServer,
+  type DevServerHandle,
+  type RunCommandOptions,
+} from "./run.js";
 
 interface ShowClient {
   messages: {
@@ -24,7 +29,7 @@ interface ShowClient {
 
 export interface ShowCommandOptions extends PathResolverOptions {
   input?: typeof input;
-  run?: (options: RunCommandOptions) => Promise<void>;
+  startDevServer?: (options: RunCommandOptions) => Promise<DevServerHandle>;
   client?: ShowClient;
   env?: NodeJS.ProcessEnv;
 }
@@ -59,8 +64,9 @@ export async function showCommand(
   };
   const scriptPrompt = await loadPrompt("show-script", promptValues);
   const questionsPrompt = await loadPrompt("show-questions", promptValues);
+  const seedDataPrompt = await loadPrompt("seed-data", promptValues);
 
-  const [script, questions] = await Promise.all([
+  const [script, questions, seedData] = await Promise.all([
     generateShowText(
       client,
       config.model,
@@ -73,23 +79,33 @@ export async function showCommand(
       questionsPrompt,
       "interview questions",
     ),
+    generateSeedData(client, config.model, seedDataPrompt),
   ]);
 
   const showDir = path.join(spike.hunchDir, "show");
   await writeShowFilesAtomically(showDir, script, questions);
+  await writeSeedDataAtomically(
+    path.join(spike.appDir, "src", "seed-data.json"),
+    seedData,
+  );
 
-  out.info(script);
-  out.info("");
-  out.info(questions);
-
-  await (options.input ?? input)({
-    message: "Press Return to start the demo server",
-  });
-  await (options.run ?? runCommand)({
+  const server = await (options.startDevServer ?? startDevServer)({
     homeDir: options.homeDir,
     cwd: options.cwd,
     demo: true,
   });
+  try {
+    out.info(script);
+    out.info("");
+    out.info(questions);
+
+    await (options.input ?? input)({
+      message: "Press Return to stop the demo server",
+    });
+  } finally {
+    server.stop();
+    await server.wait;
+  }
 }
 
 async function generateShowText(
@@ -180,6 +196,33 @@ export async function writeShowFilesAtomically(
   }
 }
 
+export async function writeSeedDataAtomically(
+  file: string,
+  seedData: SeedData,
+  fs: ShowFs = defaultShowFs,
+): Promise<void> {
+  const dir = path.dirname(file);
+  await fs.mkdir(dir, { recursive: true });
+
+  const tempPath = path.join(
+    dir,
+    `.seed-data.json.${process.pid}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}.tmp`,
+  );
+
+  try {
+    await fs.writeFile(
+      tempPath,
+      `${JSON.stringify(seedData, null, 2)}\n`,
+      "utf8",
+    );
+    await fs.rename(tempPath, file);
+  } finally {
+    await cleanup(tempPath, fs);
+  }
+}
+
 async function rollbackShowFiles(
   files: Array<{
     finalPath: string;
@@ -215,6 +258,24 @@ export function extractText(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function generateSeedData(
+  client: ShowClient,
+  model: string,
+  prompt: string,
+): Promise<SeedData> {
+  const text = await generateShowText(client, model, prompt, "seed data");
+
+  try {
+    return parseSeedDataJson(text);
+  } catch (error) {
+    if (error instanceof HunchError) {
+      throw error;
+    }
+
+    throw new HunchError(`Invalid seed data: ${errorMessage(error)}`);
+  }
 }
 
 function isMissingFile(error: unknown): boolean {

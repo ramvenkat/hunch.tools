@@ -46,6 +46,94 @@ describe("session events", () => {
     ).resolves.toEqual([]);
   });
 
+  it("does not return leading tool results without their assistant tool use", async () => {
+    const dir = await makeSpikeDir();
+    const sessionFile = join(dir, ".hunch", "session.jsonl");
+    const events: SessionEvent[] = [
+      {
+        role: "user",
+        content: "Build a dashboard",
+        ts: "2026-04-25T12:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        content: "",
+        ts: "2026-04-25T12:00:01.000Z",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "read_file",
+            input: { path: "README.md" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: "README contents",
+        ts: "2026-04-25T12:00:02.000Z",
+        toolUseId: "toolu_1",
+        toolName: "read_file",
+      },
+      {
+        role: "user",
+        content: "Continue",
+        ts: "2026-04-25T12:00:03.000Z",
+      },
+    ];
+    await writeFile(
+      sessionFile,
+      events.map((event) => JSON.stringify(event)).join("\n"),
+      "utf8",
+    );
+
+    await expect(readRecentSession(sessionFile, 2)).resolves.toEqual([
+      events[3],
+    ]);
+  });
+
+  it("keeps assistant tool-use pairs when the assistant remains inside the limit", async () => {
+    const dir = await makeSpikeDir();
+    const sessionFile = join(dir, ".hunch", "session.jsonl");
+    const events: SessionEvent[] = [
+      {
+        role: "user",
+        content: "Build a dashboard",
+        ts: "2026-04-25T12:00:00.000Z",
+      },
+      {
+        role: "assistant",
+        content: "",
+        ts: "2026-04-25T12:00:01.000Z",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "read_file",
+            input: { path: "README.md" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: "README contents",
+        ts: "2026-04-25T12:00:02.000Z",
+        toolUseId: "toolu_1",
+        toolName: "read_file",
+      },
+    ];
+    await writeFile(
+      sessionFile,
+      events.map((event) => JSON.stringify(event)).join("\n"),
+      "utf8",
+    );
+
+    await expect(readRecentSession(sessionFile, 2)).resolves.toEqual([
+      events[1],
+      events[2],
+    ]);
+  });
+
   it("wraps malformed session JSON with context", async () => {
     const dir = await makeSpikeDir();
     const sessionFile = join(dir, ".hunch", "session.jsonl");

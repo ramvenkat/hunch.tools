@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { decideCommand } from "../../src/commands/decide.js";
@@ -135,6 +136,45 @@ describe("decideCommand", () => {
       ].join("\n"),
     );
     expect(select).toHaveBeenCalledTimes(2);
+  });
+
+  it("collects pushback, supersedes the decision, and re-enters the agent", async () => {
+    const { homeDir, decisionsFile } = await setupActiveSpike();
+    await writeDecisionFile(decisionsFile, [
+      decisionSection("Use cards", "pending", "They invite comparison."),
+    ]);
+    const select = vi.fn().mockResolvedValue("push_back");
+    const input = vi.fn().mockResolvedValue("This buries the comparison task.");
+    const client = {} as Anthropic;
+    const runAgent = vi.fn().mockResolvedValue("Updated direction.");
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await decideCommand({
+      homeDir,
+      cwd: "/repo",
+      select,
+      input,
+      client,
+      runAgent,
+      env: { ANTHROPIC_API_KEY: "test-key" },
+    });
+
+    await expect(readFile(decisionsFile, "utf8")).resolves.toContain(
+      "Status: superseded",
+    );
+    expect(input).toHaveBeenCalledWith({
+      message: "What pushback should the agent address?",
+    });
+    expect(runAgent).toHaveBeenCalledWith({
+      client,
+      spike: expect.objectContaining({ name: "2026-04-25-decide" }),
+      message: expect.stringContaining("Use cards"),
+    });
+    expect(runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("This buries the comparison task."),
+      }),
+    );
   });
 });
 

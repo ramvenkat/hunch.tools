@@ -12,9 +12,21 @@ export interface RunCommandOptions extends PathResolverOptions {
   sigintGraceMs?: number;
 }
 
+export interface DevServerHandle {
+  stop: () => void;
+  wait: Promise<void>;
+}
+
 export async function runCommand(
   options: RunCommandOptions = {},
 ): Promise<void> {
+  const server = await startDevServer(options);
+  await server.wait;
+}
+
+export async function startDevServer(
+  options: RunCommandOptions = {},
+): Promise<DevServerHandle> {
   const spike = await getActiveSpike(options);
   const spinner = ora(`Starting dev server for ${spike.name}...`).start();
   const env = { ...process.env };
@@ -55,10 +67,11 @@ export async function runCommand(
     process.stderr.write(chunk);
   });
 
-  await new Promise<void>((resolve, reject) => {
+  let stopRequested = false;
+  let sigintTimer: ReturnType<typeof setTimeout> | undefined;
+  const wait = new Promise<void>((resolve, reject) => {
     let settled = false;
     let interrupted = false;
-    let sigintTimer: ReturnType<typeof setTimeout> | undefined;
     const cleanup = (): void => {
       if (sigintTimer) {
         clearTimeout(sigintTimer);
@@ -106,6 +119,11 @@ export async function runCommand(
       );
     });
     child.on("exit", (code, signal) => {
+      if (stopRequested) {
+        finish();
+        return;
+      }
+
       if (interrupted || signal === "SIGINT") {
         finish(interruptedError());
         return;
@@ -124,6 +142,20 @@ export async function runCommand(
       finish();
     });
   });
+
+  const stop = (): void => {
+    if (stopRequested) {
+      return;
+    }
+
+    stopRequested = true;
+    child.kill("SIGINT");
+    sigintTimer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, options.sigintGraceMs ?? 3_000);
+  };
+
+  return { stop, wait };
 }
 
 function interruptedError(): HunchError {

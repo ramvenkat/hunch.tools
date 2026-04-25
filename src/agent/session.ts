@@ -38,7 +38,16 @@ export async function readRecentSession(
       return [parseSessionLine(file, trimmed, index + 1)];
     });
 
-  return events.slice(-limit);
+  return trimLeadingToolEvents(events.slice(-limit));
+}
+
+function trimLeadingToolEvents(events: SessionEvent[]): SessionEvent[] {
+  const firstNonTool = events.findIndex((event) => event.role !== "tool");
+  if (firstNonTool === -1) {
+    return [];
+  }
+
+  return events.slice(firstNonTool);
 }
 
 function parseSessionLine(
