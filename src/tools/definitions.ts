@@ -89,7 +89,7 @@ export const toolDefinitions = [
           type: "string",
           minLength: 1,
           pattern:
-            "^(npm install|npm run [a-zA-Z0-9:_-]+|npx shadcn(@[a-zA-Z0-9._-]+)? add [a-zA-Z0-9:_-]+)$",
+            "^(npm install|npx shadcn(@[a-zA-Z0-9._-]+)? add [a-zA-Z0-9:_-]+)$",
           description: "Allowlisted shell command to run.",
         },
       },

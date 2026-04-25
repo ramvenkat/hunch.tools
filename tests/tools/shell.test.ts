@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,9 +13,9 @@ describe("isAllowedShellCommand", () => {
     expect(isAllowedShellCommand("npm install")).toBe(true);
   });
 
-  it("allows npm run scripts", () => {
-    expect(isAllowedShellCommand("npm run build")).toBe(true);
-    expect(isAllowedShellCommand("npm run test:unit")).toBe(true);
+  it("rejects npm run scripts because package scripts are agent-editable", () => {
+    expect(isAllowedShellCommand("npm run build")).toBe(false);
+    expect(isAllowedShellCommand("npm run test:unit")).toBe(false);
   });
 
   it("allows selected shadcn add commands", () => {
@@ -44,7 +44,7 @@ describe("runShellTool", () => {
   it("rejects cwd values that are not existing directories", async () => {
     await expect(
       runShellTool(join(tmpdir(), "hunch-missing-dir"), {
-        command: "npm run build",
+        command: "npm install",
       }),
     ).rejects.toThrow(/cwd must be an existing directory/);
   });
@@ -54,19 +54,37 @@ describe("runShellTool", () => {
     await writeFile(
       join(cwd, "package.json"),
       JSON.stringify({
-        scripts: {
-          echo: "node -e \"console.log(' shell output ')\"",
-        },
+        dependencies: {},
       }),
       "utf8",
     );
 
-    await expect(runShellTool(cwd, { command: "npm run echo" })).resolves.toBe(
-      "> echo\n> node -e \"console.log(' shell output ')\"\n\n shell output",
+    await expect(runShellTool(cwd, { command: "npm install" })).resolves.toMatch(
+      /up to date|added \d+ package/,
     );
   });
 
-  it("rejects nonzero exits with command output", async () => {
+  it("runs npm install with lifecycle scripts disabled", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
+    await writeFile(
+      join(cwd, "package.json"),
+      JSON.stringify({
+        scripts: {
+          preinstall: "node -e \"require('fs').writeFileSync('marker', 'ran')\"",
+        },
+        dependencies: {},
+      }),
+      "utf8",
+    );
+
+    await runShellTool(cwd, { command: "npm install" });
+
+    await expect(stat(join(cwd, "marker"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("rejects npm scripts even if package.json defines them", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
     await writeFile(
       join(cwd, "package.json"),
@@ -79,19 +97,17 @@ describe("runShellTool", () => {
     );
 
     await expect(runShellTool(cwd, { command: "npm run fail" })).rejects.toThrow(
-      /Shell command failed with exit code 7[\s\S]*bad news/,
+      /Shell command is not allowlisted/,
     );
   });
 
-  it("does not expose secret environment variables to scripts", async () => {
+  it("does not expose secret environment variables to commands", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
     await writeFile(
       join(cwd, "package.json"),
       JSON.stringify({
-        scripts: {
-          envcheck:
-            "node -e \"console.log(process.env.ANTHROPIC_API_KEY || 'missing')\"",
-        },
+        scripts: {},
+        dependencies: {},
       }),
       "utf8",
     );
@@ -100,8 +116,8 @@ describe("runShellTool", () => {
 
     try {
       await expect(
-        runShellTool(cwd, { command: "npm run envcheck" }),
-      ).resolves.toContain("missing");
+        runShellTool(cwd, { command: "npm install" }),
+      ).resolves.not.toContain("secret-value");
     } finally {
       if (previous === undefined) {
         delete process.env.ANTHROPIC_API_KEY;
@@ -111,7 +127,7 @@ describe("runShellTool", () => {
     }
   });
 
-  it("times out long-running commands", async () => {
+  it("rejects slow npm scripts before timeout handling is needed", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
     await writeFile(
       join(cwd, "package.json"),
@@ -125,10 +141,10 @@ describe("runShellTool", () => {
 
     await expect(
       runShellTool(cwd, { command: "npm run slow" }, { timeoutMs: 50 }),
-    ).rejects.toThrow(/timed out/);
+    ).rejects.toThrow(/Shell command is not allowlisted/);
   });
 
-  it("rejects commands that exceed the output cap", async () => {
+  it("rejects noisy npm scripts before output cap handling is needed", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "hunch-shell-test-"));
     await writeFile(
       join(cwd, "package.json"),
@@ -142,6 +158,6 @@ describe("runShellTool", () => {
 
     await expect(
       runShellTool(cwd, { command: "npm run noisy" }, { outputCapBytes: 100 }),
-    ).rejects.toThrow(/output exceeded/);
+    ).rejects.toThrow(/Shell command is not allowlisted/);
   });
 });

@@ -14,7 +14,6 @@ export interface RunShellToolOptions {
 }
 
 const NPM_INSTALL = "npm install";
-const NPM_RUN_PATTERN = /^npm run [a-zA-Z0-9:_-]+$/;
 const SHADCN_ADD_PATTERN = /^npx shadcn(?:@[a-zA-Z0-9._-]+)? add [a-zA-Z0-9:_-]+$/;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_OUTPUT_CAP_BYTES = 200 * 1024;
@@ -35,13 +34,16 @@ export function isAllowedShellCommand(command: string): boolean {
   const trimmed = command.trim();
   return (
     trimmed === NPM_INSTALL ||
-    NPM_RUN_PATTERN.test(trimmed) ||
     SHADCN_ADD_PATTERN.test(trimmed)
   );
 }
 
 function parseAllowedCommand(command: string): [string, string[]] {
   const trimmed = command.trim();
+  if (trimmed === NPM_INSTALL) {
+    return ["npm", ["install", "--ignore-scripts"]];
+  }
+
   return [trimmed.split(" ")[0] ?? "", trimmed.split(" ").slice(1)];
 }
 
