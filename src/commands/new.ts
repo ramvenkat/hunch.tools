@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import { confirm, input } from "@inquirer/prompts";
 import ora from "ora";
 
+import { createAnthropicClient } from "../agent/anthropic.js";
+import { runAgentLoop } from "../agent/loop.js";
 import { loadConfig } from "../state/config.js";
 import type { PathResolverOptions } from "../state/paths.js";
 import {
@@ -32,11 +34,23 @@ export interface NewSpikeAnswers {
   slug: string;
 }
 
+export interface InitialGenerationOptions {
+  spike: SpikeRef;
+  apiKey: string;
+  model: string;
+}
+
+export type InitialGenerationRunner = (
+  options: InitialGenerationOptions,
+) => Promise<void>;
+
 export interface CreateSpikeOptions extends PathResolverOptions {
   install?: boolean;
   generate?: boolean;
   date?: Date;
   installTimeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
+  initialGenerationRunner?: InitialGenerationRunner;
 }
 
 export async function newCommand(
@@ -72,7 +86,7 @@ export async function newCommand(
   try {
     const spike = await createSpike(
       { problem, persona, journey, slug },
-      { ...options, install: options.install ?? true, generate: false },
+      { ...options, install: options.install ?? true },
     );
     spinner.succeed(`Created ${spike.name}`);
     out.success("Run `hunch run` to see it.");
@@ -105,6 +119,18 @@ export async function createSpike(
 
     if (options.install) {
       await npmInstall(stagingSpike.appDir, options.installTimeoutMs);
+    }
+
+    if (options.generate !== false) {
+      const env = options.env ?? process.env;
+      const apiKey = env[config.apiKeyEnv];
+      if (apiKey) {
+        await (options.initialGenerationRunner ?? runInitialGeneration)({
+          spike: stagingSpike,
+          apiKey,
+          model: config.model,
+        });
+      }
     }
 
     await rename(stagingSpike.dir, spike.dir);
@@ -197,6 +223,21 @@ function resolveTemplatePath(): string {
 
 function validateRequired(value: string): true | string {
   return value.trim().length > 0 ? true : "Required";
+}
+
+async function runInitialGeneration(
+  options: InitialGenerationOptions,
+): Promise<void> {
+  const client = createAnthropicClient({
+    apiKey: options.apiKey,
+    model: options.model,
+  });
+  await runAgentLoop({
+    client,
+    spike: options.spike,
+    message:
+      "Generate the initial prototype for this spike. Replace the starter app with a focused, clickable flow that tests the journey.",
+  });
 }
 
 async function npmInstall(cwd: string, timeoutMs = 120_000): Promise<void> {
