@@ -106,11 +106,6 @@ export async function runAgentLoop(
     }
 
     toolIterations += 1;
-    if (toolIterations > maxToolIterations) {
-      throw new HunchError(
-        `Agent exceeded maximum tool iterations of ${maxToolIterations}.`,
-      );
-    }
 
     if (toolUses.length === 0) {
       throw new HunchError(
@@ -225,7 +220,7 @@ async function createMessage(
     return await client.messages.create({
       model: input.model,
       max_tokens: 4096,
-      system: input.system,
+      system: [{ type: "text", text: input.system, cache_control: { type: "ephemeral" } }],
       tools: toolDefinitions,
       messages: [...input.messages],
     });
