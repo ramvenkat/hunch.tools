@@ -1,0 +1,42 @@
+{
+  "name": "hunch-cli",
+  "version": "0.1.0",
+  "description": "A CLI for PMs who code to turn customer problems into disposable prototypes.",
+  "type": "module",
+  "bin": {
+    "hunch": "./bin/hunch.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-prompts.mjs",
+    "dev": "tsx src/cli.ts",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "test:built-prompts": "npm run build && node scripts/smoke-built-prompts.mjs",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@inquirer/prompts": "^7.3.2",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "open": "^10.1.0",
+    "ora": "^8.2.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
