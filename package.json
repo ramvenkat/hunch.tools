@@ -2,6 +2,7 @@
   "name": "hunch-cli",
   "version": "0.1.0",
   "description": "A CLI for PMs who code to turn customer problems into disposable prototypes.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "hunch": "./bin/hunch.js"

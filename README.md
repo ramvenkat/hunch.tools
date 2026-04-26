@@ -217,4 +217,4 @@ npm_config_cache=/tmp/hunch-npm-cache npm pack --dry-run
 
 ## License
 
-No license has been selected yet.
+MIT. See [LICENSE](LICENSE).
