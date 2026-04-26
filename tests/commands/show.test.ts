@@ -82,9 +82,13 @@ describe("showCommand", () => {
       expect.objectContaining({
         messages: [
           expect.objectContaining({
-            content: expect.stringContaining(
-              "Write a concise customer interview walkthrough script",
-            ),
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                text: expect.stringContaining(
+                  "Write a concise customer interview walkthrough script",
+                ),
+              }),
+            ]),
           }),
         ],
       }),
@@ -94,7 +98,11 @@ describe("showCommand", () => {
       expect.objectContaining({
         messages: [
           expect.objectContaining({
-            content: expect.stringContaining("Write customer interview questions"),
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                text: expect.stringContaining("Write customer interview questions"),
+              }),
+            ]),
           }),
         ],
       }),
@@ -104,7 +112,11 @@ describe("showCommand", () => {
       expect.objectContaining({
         messages: [
           expect.objectContaining({
-            content: expect.stringContaining("Generate realistic demo data"),
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                text: expect.stringContaining("Generate realistic demo data"),
+              }),
+            ]),
           }),
         ],
       }),

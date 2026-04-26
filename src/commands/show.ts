@@ -17,12 +17,16 @@ import {
   type RunCommandOptions,
 } from "./run.js";
 
+type ShowMessageContent =
+  | string
+  | Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
+
 interface ShowClient {
   messages: {
     create: (params: {
       model: string;
       max_tokens: number;
-      messages: Array<{ role: "user"; content: string }>;
+      messages: Array<{ role: "user"; content: ShowMessageContent }>;
     }) => Promise<{ content: Array<{ type: string; text?: string }> }>;
   };
 }
@@ -120,7 +124,12 @@ async function generateShowText(
     response = await client.messages.create({
       model,
       max_tokens: 2_000,
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: prompt, cache_control: { type: "ephemeral" } }],
+        },
+      ],
     });
   } catch (error) {
     throw new HunchError(`Failed to generate ${label}: ${errorMessage(error)}`);
