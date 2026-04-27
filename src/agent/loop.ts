@@ -1,4 +1,3 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type {
   ContentBlockParam,
   MessageParam,
@@ -23,6 +22,7 @@ import {
 import { runShellTool, type RunShellToolInput } from "../tools/shell.js";
 import { appendDecision, type DecisionInput } from "../tools/ux-decisions.js";
 import { HunchError } from "../utils/errors.js";
+import type { AgentProviderClient } from "./client.js";
 import { timestamp } from "../utils/time.js";
 import { loadSpikeContext } from "./context.js";
 import { loadPrompt } from "./prompts.js";
@@ -30,7 +30,7 @@ import { appendSessionEvent, readRecentSession } from "./session.js";
 import type { SessionEvent } from "./types.js";
 
 export interface RunAgentLoopOptions {
-  client: Anthropic;
+  client: AgentProviderClient;
   spike: SpikeRef;
   message: string;
   verbose?: boolean;
@@ -218,7 +218,7 @@ function sessionEvent(
 }
 
 async function createMessage(
-  client: Anthropic,
+  client: AgentProviderClient,
   input: { model: string; system: string; messages: MessageParam[] },
 ) {
   try {

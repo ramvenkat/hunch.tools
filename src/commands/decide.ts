@@ -1,9 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type Anthropic from "@anthropic-ai/sdk";
 import { input as promptInput, select as promptSelect } from "@inquirer/prompts";
 
 import { createAnthropicClient } from "../agent/anthropic.js";
+import type { AgentProviderClient } from "../agent/client.js";
 import { runAgentLoop } from "../agent/loop.js";
 import type { RunAgentLoopOptions } from "../agent/loop.js";
 import { loadConfig } from "../state/config.js";
@@ -29,7 +29,7 @@ type AgentRunner = (options: RunAgentLoopOptions) => Promise<string>;
 export interface DecideCommandOptions extends PathResolverOptions {
   select?: SelectDecision;
   input?: InputDecision;
-  client?: Anthropic;
+  client?: AgentProviderClient;
   runAgent?: AgentRunner;
   env?: NodeJS.ProcessEnv;
   verbose?: boolean;

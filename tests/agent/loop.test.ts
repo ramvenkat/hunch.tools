@@ -1,10 +1,10 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Message } from "@anthropic-ai/sdk/resources/messages/messages";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AgentProviderClient } from "../../src/agent/client.js";
 import { runAgentLoop } from "../../src/agent/loop.js";
 import type { SpikeRef } from "../../src/state/spike.js";
 import { HunchError } from "../../src/utils/errors.js";
@@ -313,7 +313,7 @@ describe("runAgentLoop", () => {
           throw new Error("connection reset");
         }),
       },
-    } as unknown as Anthropic;
+    } as unknown as AgentProviderClient;
 
     await expect(
       runAgentLoop({ client, spike, message: "Hello?" }),
@@ -461,8 +461,10 @@ describe("runAgentLoop", () => {
   });
 });
 
-function fakeClient(responses: Message[]): Anthropic {
+function fakeClient(responses: Message[]): AgentProviderClient {
   return {
+    provider: "anthropic",
+    model: "claude-test",
     messages: {
       create: vi.fn(async () => {
         const response = responses.shift();
@@ -472,7 +474,7 @@ function fakeClient(responses: Message[]): Anthropic {
         return response;
       }),
     },
-  } as unknown as Anthropic;
+  } as unknown as AgentProviderClient;
 }
 
 function messageResponse(options: {
