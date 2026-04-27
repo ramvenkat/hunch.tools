@@ -71,7 +71,11 @@ export function buildCli(options: PathResolverOptions = {}): Command {
   program
     .command("show")
     .description("Prepare the active spike for a customer interview.")
-    .action(() => showCommand(options));
+    .option("--local", "Use the local model.")
+    .option("--cloud", "Use Anthropic.")
+    .action((commandOptions: { local?: boolean; cloud?: boolean }) =>
+      showCommand({ ...options, ...commandOptions }),
+    );
 
   const local = program
     .command("local")

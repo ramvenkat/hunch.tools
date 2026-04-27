@@ -2,15 +2,14 @@ import { input } from "@inquirer/prompts";
 
 import { runAgentLoop } from "../agent/loop.js";
 import {
+  providerPreferenceFromFlags,
   resolveAgentClient,
-  type ProviderPreference,
   type ResolveAgentClientOptions,
   type ResolvedAgentClient,
 } from "../agent/provider-router.js";
 import { loadConfig } from "../state/config.js";
 import type { PathResolverOptions } from "../state/paths.js";
 import { getActiveSpike } from "../state/spike.js";
-import { HunchError } from "../utils/errors.js";
 
 export interface AskCommandOptions extends PathResolverOptions {
   verbose?: boolean;
@@ -29,7 +28,7 @@ export async function askCommand(
 ): Promise<void> {
   const config = await loadConfig(options);
   const spike = await getActiveSpike(options);
-  const preference = getProviderPreference(options);
+  const preference = providerPreferenceFromFlags(options);
   const { client } = await (options.resolveClient ?? resolveAgentClient)({
     config,
     preference,
@@ -57,22 +56,4 @@ export async function askCommand(
     });
     process.stdout.write("\n");
   }
-}
-
-function getProviderPreference(
-  options: Pick<AskCommandOptions, "local" | "cloud">,
-): ProviderPreference | undefined {
-  if (options.local && options.cloud) {
-    throw new HunchError("Choose either --local or --cloud, not both.");
-  }
-
-  if (options.local) {
-    return "local";
-  }
-
-  if (options.cloud) {
-    return "cloud";
-  }
-
-  return undefined;
 }

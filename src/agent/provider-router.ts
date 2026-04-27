@@ -70,6 +70,25 @@ export async function resolveAgentClient(
   };
 }
 
+export function providerPreferenceFromFlags(options: {
+  local?: boolean;
+  cloud?: boolean;
+}): ProviderPreference | undefined {
+  if (options.local && options.cloud) {
+    throw new HunchError("Choose either --local or --cloud, not both.");
+  }
+
+  if (options.local) {
+    return "local";
+  }
+
+  if (options.cloud) {
+    return "cloud";
+  }
+
+  return undefined;
+}
+
 async function assertLocalReady(
   options: ResolveAgentClientOptions,
 ): Promise<void> {

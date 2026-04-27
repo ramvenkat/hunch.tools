@@ -210,6 +210,43 @@ describe("showCommand", () => {
       ),
     );
   });
+
+  it("routes generation through the requested provider", async () => {
+    const { homeDir } = await setupActiveSpike();
+    const client = fakeClient(
+      [
+        { content: [{ type: "text", text: "script" }] },
+        { content: [{ type: "text", text: "questions" }] },
+        {
+          content: [
+            {
+              type: "text",
+              text: '{"items":[{"title":"Seed","body":"Demo"}]}',
+            },
+          ],
+        },
+      ],
+      "hunch-lite",
+    );
+    const resolveClient = vi.fn().mockResolvedValue({ client, provider: "local" });
+    const server = { stop: vi.fn(), wait: Promise.resolve(undefined) };
+
+    await showCommand({
+      homeDir,
+      cwd: "/repo",
+      local: true,
+      resolveClient,
+      input: vi.fn(),
+      startDevServer: vi.fn().mockResolvedValue(server),
+    });
+
+    expect(resolveClient).toHaveBeenCalledWith(
+      expect.objectContaining({ preference: "local" }),
+    );
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "hunch-lite" }),
+    );
+  });
 });
 
 describe("extractText", () => {
@@ -284,8 +321,10 @@ function fakeClient(
   responses: Array<
     Error | { content: Array<{ type: string; text?: string }> }
   >,
+  model?: string,
 ) {
   return {
+    model,
     messages: {
       create: vi.fn(async () => {
         const next = responses.shift();
