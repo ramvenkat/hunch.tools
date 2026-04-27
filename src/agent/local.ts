@@ -4,6 +4,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import type { AgentProviderClient } from "./client.js";
 import type { HunchConfig } from "../state/config.js";
 import { HunchError } from "../utils/errors.js";
 
@@ -103,6 +104,20 @@ export async function setupLocalModel(
   }
 
   return getLocalModelStatus(config, deps);
+}
+
+export function createLocalClient(config: HunchConfig): AgentProviderClient {
+  return {
+    provider: "local",
+    model: config.local.model,
+    messages: {
+      create: async () => {
+        throw new HunchError(
+          "Local model runtime is not available yet. Use `--cloud` or set provider: anthropic.",
+        );
+      },
+    },
+  };
 }
 
 async function downloadModelFile(
