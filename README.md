@@ -12,6 +12,7 @@ hunch run
 hunch ask "make the cards more specific to the persona"
 hunch decide
 hunch show
+hunch local status
 ```
 
 ## Why
@@ -31,6 +32,10 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 Hunch requires Node 20 or newer.
+
+Hunch is local-first when a tiny GGUF model is configured. It tries the local
+runtime first in `auto` mode, then falls back to Anthropic when the local model
+is unavailable.
 
 ## Quickstart
 
@@ -101,6 +106,13 @@ command.
 
 Use `--verbose` to print tool activity.
 
+Use `--local` to force the local model, or `--cloud` to force Anthropic:
+
+```sh
+hunch ask --local "tighten the empty state"
+hunch ask --cloud "use the cloud model for this harder edit"
+```
+
 ### `hunch decide`
 
 Reviews pending UX decisions from `.hunch/decisions.md`. You can approve,
@@ -116,6 +128,22 @@ Prepares the active spike for a customer interview:
 - writes `app/src/seed-data.json`
 - starts the demo server
 - waits for Return before stopping the server
+
+Use `--local` or `--cloud` to choose the model provider for generated interview
+materials.
+
+### `hunch local`
+
+Checks and installs the configured local model:
+
+```sh
+hunch local status
+hunch local setup
+```
+
+`status` shows whether the local model is enabled, installed, and ready.
+`setup` downloads `local.model_url` to `local.model_path` when a model URL is
+configured. If no URL is configured, place a GGUF model at the configured path.
 
 ### `hunch list` and `hunch open`
 
@@ -160,10 +188,28 @@ Each spike looks roughly like this:
 You can customize defaults in `~/.hunch/config.yaml`:
 
 ```yaml
+provider: auto
+fallback_provider: anthropic
 model: claude-3-5-sonnet-latest
 api_key_env: ANTHROPIC_API_KEY
 spike_dir: ~/hunches
+local:
+  enabled: true
+  model_path: ~/.hunch/models/hunch-lite.gguf
+  model_url: ""
+  model: hunch-lite
 ```
+
+Provider modes:
+
+- `auto`: use local when the configured GGUF model is installed, otherwise use
+  Anthropic.
+- `local`: require the local model.
+- `anthropic`: always use Anthropic.
+
+The local runtime uses `node-llama-cpp`, installed as an optional dependency.
+This keeps Hunch usable on machines that cannot run local inference while still
+making the local path available where it works.
 
 ## Safety Model
 
@@ -210,10 +256,12 @@ npm_config_cache=/tmp/hunch-npm-cache npm pack --dry-run
 
 ## Current Limits
 
-- Anthropic is the only supported model provider.
+- Local inference requires a GGUF model file and a machine that can run
+  `node-llama-cpp`.
+- Anthropic is still the only cloud fallback provider.
 - Spikes are local directories; there is no cloud sync or team workflow yet.
 - The generated app template is intentionally small.
-- Live `ask` and `show` flows require `ANTHROPIC_API_KEY`.
+- Live cloud fallback requires `ANTHROPIC_API_KEY`.
 
 ## License
 
