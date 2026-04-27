@@ -230,6 +230,7 @@ describe("showCommand", () => {
     );
     const resolveClient = vi.fn().mockResolvedValue({ client, provider: "local" });
     const server = { stop: vi.fn(), wait: Promise.resolve(undefined) };
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await showCommand({
       homeDir,

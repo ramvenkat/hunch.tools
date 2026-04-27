@@ -308,6 +308,8 @@ describe("runAgentLoop", () => {
   it("wraps Anthropic failures and still persists the user event", async () => {
     const spike = await makeSpike();
     const client = {
+      provider: "anthropic",
+      model: "claude-test",
       messages: {
         create: vi.fn(async () => {
           throw new Error("connection reset");

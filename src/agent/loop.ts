@@ -6,7 +6,6 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages/messages";
 import path from "node:path";
 
-import { loadConfig } from "../state/config.js";
 import type { SpikeRef } from "../state/spike.js";
 import { toolDefinitions } from "../tools/definitions.js";
 import {
@@ -48,7 +47,6 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 export async function runAgentLoop(
   options: RunAgentLoopOptions,
 ): Promise<string> {
-  const config = await loadConfig();
   const context = await loadSpikeContext(options.spike);
   const system = await loadPrompt("main", {
     problem: context.problem,
@@ -74,7 +72,7 @@ export async function runAgentLoop(
 
   while (true) {
     const response = await createMessage(options.client, {
-      model: config.model,
+      model: options.client.model,
       system,
       messages,
     });
@@ -230,8 +228,14 @@ async function createMessage(
       messages: [...input.messages],
     });
   } catch (error) {
-    throw new HunchError(`Anthropic request failed: ${errorMessage(error)}`);
+    throw new HunchError(
+      `${providerLabel(client.provider)} request failed: ${errorMessage(error)}`,
+    );
   }
+}
+
+function providerLabel(provider: AgentProviderClient["provider"]): string {
+  return provider === "anthropic" ? "Anthropic" : "Local";
 }
 
 function assistantSessionEvent(contentBlocks: ContentBlockParam[]): SessionEvent {

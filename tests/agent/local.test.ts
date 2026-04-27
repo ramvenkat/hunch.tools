@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createLocalClient,
   getLocalModelStatus,
   setupLocalModel,
 } from "../../src/agent/local.js";
@@ -93,6 +94,109 @@ describe("setupLocalModel", () => {
     config.local.enabled = false;
 
     await expect(setupLocalModel(config)).rejects.toThrow(/disabled/);
+  });
+});
+
+describe("createLocalClient", () => {
+  it("generates text with a node-llama-cpp compatible runtime", async () => {
+    const dir = await makeDir();
+    const prompt = vi.fn().mockResolvedValue("local answer");
+    const loadModel = vi.fn().mockResolvedValue({
+      createContext: vi.fn().mockResolvedValue({
+        getSequence: vi.fn(() => "sequence"),
+      }),
+    });
+    const client = createLocalClient(makeConfig(join(dir, "model.gguf")), {
+      importRuntime: async () => ({
+        getLlama: async () => ({ loadModel }),
+        LlamaChatSession: class {
+          prompt = prompt;
+          constructor(readonly options: { contextSequence: unknown }) {}
+        },
+      }),
+    });
+
+    await expect(
+      client.messages.create({
+        model: "hunch-lite",
+        max_tokens: 128,
+        system: "Stay focused.",
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).resolves.toEqual({
+      content: [{ type: "text", text: "local answer" }],
+      stop_reason: "end_turn",
+    });
+
+    expect(loadModel).toHaveBeenCalledWith({
+      modelPath: join(dir, "model.gguf"),
+    });
+    expect(prompt).toHaveBeenCalledWith(
+      expect.stringContaining("USER:\nHello"),
+      { maxTokens: 128 },
+    );
+  });
+
+  it("converts tagged local tool calls into provider tool use blocks", async () => {
+    const dir = await makeDir();
+    const prompt = vi
+      .fn()
+      .mockResolvedValue(
+        '<tool_call>{"name":"read_file","input":{"path":"src/App.tsx"}}</tool_call>',
+      );
+    const client = createLocalClient(makeConfig(join(dir, "model.gguf")), {
+      importRuntime: async () => ({
+        getLlama: async () => ({
+          loadModel: async () => ({
+            createContext: async () => ({ getSequence: () => "sequence" }),
+          }),
+        }),
+        LlamaChatSession: class {
+          prompt = prompt;
+          constructor(readonly options: { contextSequence: unknown }) {}
+        },
+      }),
+    });
+
+    await expect(
+      client.messages.create({
+        model: "hunch-lite",
+        max_tokens: 128,
+        tools: [{ name: "read_file" }],
+        messages: [{ role: "user", content: "Read App" }],
+      }),
+    ).resolves.toMatchObject({
+      content: [
+        {
+          type: "tool_use",
+          name: "read_file",
+          input: { path: "src/App.tsx" },
+        },
+      ],
+      stop_reason: "tool_use",
+    });
+
+    expect(prompt).toHaveBeenCalledWith(
+      expect.stringContaining("<tool_call>"),
+      expect.any(Object),
+    );
+  });
+
+  it("explains how to install the local runtime when it is missing", async () => {
+    const dir = await makeDir();
+    const client = createLocalClient(makeConfig(join(dir, "model.gguf")), {
+      importRuntime: async () => {
+        throw new Error("Cannot find package");
+      },
+    });
+
+    await expect(
+      client.messages.create({
+        model: "hunch-lite",
+        max_tokens: 128,
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).rejects.toThrow(/node-llama-cpp/);
   });
 });
 
