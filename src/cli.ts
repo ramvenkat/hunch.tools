@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { askCommand } from "./commands/ask.js";
 import { decideCommand } from "./commands/decide.js";
 import { listCommand } from "./commands/list.js";
+import { localSetupCommand, localStatusCommand } from "./commands/local.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
 import { runCommand } from "./commands/run.js";
@@ -69,6 +70,24 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .command("show")
     .description("Prepare the active spike for a customer interview.")
     .action(() => showCommand(options));
+
+  const local = program
+    .command("local")
+    .description("Manage the local model used before cloud fallback.");
+
+  local
+    .command("status")
+    .description("Show local model readiness.")
+    .action(async () => {
+      await localStatusCommand(options);
+    });
+
+  local
+    .command("setup")
+    .description("Install the configured local model.")
+    .action(async () => {
+      await localSetupCommand(options);
+    });
 
   return program;
 }
