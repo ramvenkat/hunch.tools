@@ -50,10 +50,12 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .argument("[message...]", "Message to send to the active spike agent.")
     .description("Ask the active spike agent for help.")
     .option("--verbose", "Print tool activity.")
+    .option("--local", "Use the local model.")
+    .option("--cloud", "Use Anthropic.")
     .action(
       (
         messageParts: string[] | undefined,
-        commandOptions: { verbose?: boolean },
+        commandOptions: { verbose?: boolean; local?: boolean; cloud?: boolean },
       ) =>
         askCommand(messageParts?.join(" "), {
           ...options,
