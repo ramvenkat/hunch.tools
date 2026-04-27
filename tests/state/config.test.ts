@@ -14,10 +14,17 @@ describe("loadConfig", () => {
     const homeDir = await makeHome();
 
     await expect(loadConfig({ homeDir, cwd: "/repo" })).resolves.toEqual({
-      provider: "anthropic",
+      provider: "auto",
+      fallbackProvider: "anthropic",
       model: "claude-3-5-sonnet-latest",
       apiKeyEnv: "ANTHROPIC_API_KEY",
       spikeDir: join(homeDir, "hunches"),
+      local: {
+        enabled: true,
+        modelPath: join(homeDir, ".hunch", "models", "hunch-lite.gguf"),
+        modelUrl: "",
+        model: "hunch-lite",
+      },
       pushBackOnScopeCreep: true,
       logDecisions: true,
     });
@@ -41,11 +48,47 @@ describe("loadConfig", () => {
 
     await expect(loadConfig({ homeDir, cwd: "/repo" })).resolves.toEqual({
       provider: "anthropic",
+      fallbackProvider: "anthropic",
       model: "claude-sonnet-4-5",
       apiKeyEnv: "CUSTOM_ANTHROPIC_KEY",
       spikeDir: "/tmp/my-hunches",
+      local: {
+        enabled: true,
+        modelPath: join(homeDir, ".hunch", "models", "hunch-lite.gguf"),
+        modelUrl: "",
+        model: "hunch-lite",
+      },
       pushBackOnScopeCreep: false,
       logDecisions: false,
+    });
+  });
+
+  it("reads local provider options", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      [
+        "provider: local",
+        "fallback_provider: anthropic",
+        "local:",
+        "  enabled: false",
+        "  model_path: ~/models/tiny.gguf",
+        "  model_url: https://example.com/tiny.gguf",
+        "  model: tiny",
+        "",
+      ].join("\n"),
+    );
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).resolves.toMatchObject({
+      provider: "local",
+      fallbackProvider: "anthropic",
+      local: {
+        enabled: false,
+        modelPath: join(homeDir, "models", "tiny.gguf"),
+        modelUrl: "https://example.com/tiny.gguf",
+        model: "tiny",
+      },
     });
   });
 
@@ -88,6 +131,19 @@ describe("loadConfig", () => {
 
     await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
       /Invalid Hunch config: provider/,
+    );
+  });
+
+  it("rejects unsupported fallback providers", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      "fallback_provider: openai\n",
+    );
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: fallback_provider/,
     );
   });
 
@@ -135,6 +191,43 @@ describe("loadConfig", () => {
 
     await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
       /Invalid Hunch config: agent/,
+    );
+  });
+
+  it("rejects non-object local config", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), "local: true\n");
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: local/,
+    );
+  });
+
+  it("rejects invalid local enabled values", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      ["local:", "  enabled: sometimes", ""].join("\n"),
+    );
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: local.enabled/,
+    );
+  });
+
+  it.each([
+    ["local.model_path", ["local:", '  model_path: ""', ""].join("\n")],
+    ["local.model_url", ["local:", '  model_url: ""', ""].join("\n")],
+    ["local.model", ["local:", '  model: "   "', ""].join("\n")],
+  ])("rejects blank %s values", async (key, yaml) => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), yaml);
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      new RegExp(`Invalid Hunch config: ${key}`),
     );
   });
 });
