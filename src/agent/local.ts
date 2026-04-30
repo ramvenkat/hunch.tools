@@ -188,7 +188,7 @@ async function loadLocalRuntime(
 
 function renderLocalPrompt(params: AgentMessageCreateParams): string {
   const parts = [
-    params.system ? `SYSTEM:\n${params.system}` : "",
+    params.system ? `SYSTEM:\n${renderLocalSystem(params.system)}` : "",
     params.tools && params.tools.length > 0
       ? [
           "TOOLS:",
@@ -204,6 +204,16 @@ function renderLocalPrompt(params: AgentMessageCreateParams): string {
   ].filter((part) => part.length > 0);
 
   return parts.join("\n\n");
+}
+
+function renderLocalSystem(
+  system: AgentMessageCreateParams["system"],
+): string {
+  if (typeof system === "string") {
+    return system;
+  }
+
+  return (system ?? []).map((block) => block.text).join("\n");
 }
 
 function renderLocalContent(

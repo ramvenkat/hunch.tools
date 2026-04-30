@@ -5,10 +5,16 @@ import type {
 
 export type ProviderName = "local" | "anthropic";
 
+export interface AgentSystemTextBlock {
+  type: "text";
+  text: string;
+  cache_control?: { type: "ephemeral" };
+}
+
 export interface AgentMessageCreateParams {
   model: string;
   max_tokens: number;
-  system?: string;
+  system?: string | AgentSystemTextBlock[];
   tools?: unknown[];
   messages: MessageParam[];
 }

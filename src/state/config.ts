@@ -51,7 +51,7 @@ export async function loadConfig(
   return {
     provider: parsed.provider ?? "auto",
     fallbackProvider: parsed.fallback_provider ?? "anthropic",
-    model: parsed.model ?? "claude-3-5-sonnet-latest",
+    model: parsed.model ?? "claude-sonnet-4-6",
     apiKeyEnv: parsed.api_key_env ?? "ANTHROPIC_API_KEY",
     spikeDir: expandHome(parsed.spike_dir ?? paths.defaultSpikeDir, paths.homeDir),
     local: {

@@ -206,10 +206,7 @@ async function writeSpikeFiles(
     "# UX Decisions\n\n",
   );
   await writeFile(path.join(spike.hunchDir, "session.jsonl"), "");
-  await writeFile(
-    path.join(spike.hunchDir, "config.yaml"),
-    "model: claude-3-5-sonnet-latest\n",
-  );
+  await writeFile(path.join(spike.hunchDir, "config.yaml"), "");
   await writeFile(
     path.join(spike.dir, "README.md"),
     [

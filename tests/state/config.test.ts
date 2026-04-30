@@ -16,7 +16,7 @@ describe("loadConfig", () => {
     await expect(loadConfig({ homeDir, cwd: "/repo" })).resolves.toEqual({
       provider: "auto",
       fallbackProvider: "anthropic",
-      model: "claude-3-5-sonnet-latest",
+      model: "claude-sonnet-4-6",
       apiKeyEnv: "ANTHROPIC_API_KEY",
       spikeDir: join(homeDir, "hunches"),
       local: {

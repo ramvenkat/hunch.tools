@@ -47,7 +47,13 @@ describe("runAgentLoop", () => {
       expect.objectContaining({
         model: "claude-test",
         max_tokens: 4096,
-        system: expect.stringContaining("Problem"),
+        system: expect.arrayContaining([
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringContaining("Problem"),
+            cache_control: { type: "ephemeral" },
+          }),
+        ]),
         tools: expect.any(Array),
         messages: [{ role: "user", content: "What should I build?" }],
       }),
