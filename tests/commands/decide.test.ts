@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type Anthropic from "@anthropic-ai/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AgentProviderClient } from "../../src/agent/client.js";
 import { decideCommand } from "../../src/commands/decide.js";
 import { HunchError } from "../../src/utils/errors.js";
 
@@ -145,7 +145,7 @@ describe("decideCommand", () => {
     ]);
     const select = vi.fn().mockResolvedValue("push_back");
     const input = vi.fn().mockResolvedValue("This buries the comparison task.");
-    const client = {} as Anthropic;
+    const client = {} as AgentProviderClient;
     const runAgent = vi.fn().mockResolvedValue("Updated direction.");
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -184,7 +184,7 @@ describe("decideCommand", () => {
     ]);
     const select = vi.fn().mockResolvedValue("push_back");
     const input = vi.fn().mockResolvedValue("This needs a faster path.");
-    const client = {} as Anthropic;
+    const client = {} as AgentProviderClient;
     const runAgent = vi.fn().mockRejectedValue(new Error("agent failed"));
     vi.spyOn(console, "log").mockImplementation(() => undefined);
 
@@ -212,7 +212,7 @@ describe("decideCommand", () => {
     ]);
     const select = vi.fn().mockResolvedValue("push_back");
     const input = vi.fn().mockResolvedValue("Keep the title but change the flow.");
-    const client = {} as Anthropic;
+    const client = {} as AgentProviderClient;
     const runAgent = vi.fn(async () => {
       await writeFile(
         decisionsFile,

@@ -5,11 +5,23 @@ import YAML from "yaml";
 import { HunchError } from "../utils/errors.js";
 import { createPathResolver, type PathResolverOptions } from "./paths.js";
 
+export type ProviderMode = "auto" | "local" | "anthropic";
+export type FallbackProvider = "anthropic";
+
+export interface LocalConfig {
+  enabled: boolean;
+  modelPath: string;
+  modelUrl: string;
+  model: string;
+}
+
 export interface HunchConfig {
-  provider: "anthropic";
+  provider: ProviderMode;
+  fallbackProvider: FallbackProvider;
   model: string;
   apiKeyEnv: string;
   spikeDir: string;
+  local: LocalConfig;
   pushBackOnScopeCreep: boolean;
   logDecisions: boolean;
 }
@@ -37,10 +49,21 @@ export async function loadConfig(
   }
 
   return {
-    provider: parsed.provider ?? "anthropic",
+    provider: parsed.provider ?? "auto",
+    fallbackProvider: parsed.fallback_provider ?? "anthropic",
     model: parsed.model ?? "claude-sonnet-4-6",
     apiKeyEnv: parsed.api_key_env ?? "ANTHROPIC_API_KEY",
     spikeDir: expandHome(parsed.spike_dir ?? paths.defaultSpikeDir, paths.homeDir),
+    local: {
+      enabled: parsed.local?.enabled ?? true,
+      modelPath: expandHome(
+        parsed.local?.model_path ??
+          path.join(paths.hunchDir, "models", "hunch-lite.gguf"),
+        paths.homeDir,
+      ),
+      modelUrl: parsed.local?.model_url ?? "",
+      model: parsed.local?.model ?? "hunch-lite",
+    },
     pushBackOnScopeCreep:
       parsed.agent?.push_back_on_scope_creep ??
       parsed.push_back_on_scope_creep ??
@@ -50,10 +73,17 @@ export async function loadConfig(
 }
 
 interface ConfigYaml {
-  provider?: "anthropic";
+  provider?: ProviderMode;
+  fallback_provider?: FallbackProvider;
   model?: string;
   api_key_env?: string;
   spike_dir?: string;
+  local?: {
+    enabled?: boolean;
+    model_path?: string;
+    model_url?: string;
+    model?: string;
+  };
   push_back_on_scope_creep?: boolean;
   log_decisions?: boolean;
   agent?: {
@@ -74,10 +104,21 @@ function parseConfig(value: unknown): ConfigYaml {
   const config: ConfigYaml = {};
 
   if ("provider" in value) {
-    if (value.provider !== "anthropic") {
-      throw invalidConfig('provider must be "anthropic"');
+    if (
+      value.provider !== "auto" &&
+      value.provider !== "local" &&
+      value.provider !== "anthropic"
+    ) {
+      throw invalidConfig('provider must be "auto", "local", or "anthropic"');
     }
     config.provider = value.provider;
+  }
+
+  if ("fallback_provider" in value) {
+    if (value.fallback_provider !== "anthropic") {
+      throw invalidConfig('fallback_provider must be "anthropic"');
+    }
+    config.fallback_provider = value.fallback_provider;
   }
 
   if ("model" in value) {
@@ -104,6 +145,39 @@ function parseConfig(value: unknown): ConfigYaml {
       value.log_decisions,
       "log_decisions",
     );
+  }
+
+  if ("local" in value) {
+    if (!isRecord(value.local)) {
+      throw invalidConfig("local must be an object");
+    }
+
+    config.local = {};
+
+    if ("enabled" in value.local) {
+      config.local.enabled = readOptionalBoolean(
+        value.local.enabled,
+        "local.enabled",
+      );
+    }
+
+    if ("model_path" in value.local) {
+      config.local.model_path = readOptionalString(
+        value.local.model_path,
+        "local.model_path",
+      );
+    }
+
+    if ("model_url" in value.local) {
+      config.local.model_url = readOptionalString(
+        value.local.model_url,
+        "local.model_url",
+      );
+    }
+
+    if ("model" in value.local) {
+      config.local.model = readOptionalString(value.local.model, "local.model");
+    }
   }
 
   if ("agent" in value) {

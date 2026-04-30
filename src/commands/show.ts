@@ -2,10 +2,16 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { input } from "@inquirer/prompts";
 
-import { createAnthropicClient } from "../agent/anthropic.js";
 import { loadSpikeContext } from "../agent/context.js";
 import { loadPrompt } from "../agent/prompts.js";
+import {
+  providerPreferenceFromFlags,
+  resolveAgentClient,
+  type ResolveAgentClientOptions,
+  type ResolvedAgentClient,
+} from "../agent/provider-router.js";
 import { loadConfig } from "../state/config.js";
+import type { HunchConfig } from "../state/config.js";
 import type { PathResolverOptions } from "../state/paths.js";
 import { getActiveSpike } from "../state/spike.js";
 import { parseSeedDataJson, type SeedData } from "../tools/seed-data.js";
@@ -22,6 +28,7 @@ type ShowMessageContent =
   | Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
 
 interface ShowClient {
+  model?: string;
   messages: {
     create: (params: {
       model: string;
@@ -36,6 +43,11 @@ export interface ShowCommandOptions extends PathResolverOptions {
   startDevServer?: (options: RunCommandOptions) => Promise<DevServerHandle>;
   client?: ShowClient;
   env?: NodeJS.ProcessEnv;
+  local?: boolean;
+  cloud?: boolean;
+  resolveClient?: (
+    options: ResolveAgentClientOptions,
+  ) => Promise<ResolvedAgentClient>;
 }
 
 interface ShowFs {
@@ -53,12 +65,8 @@ export async function showCommand(
   const config = await loadConfig(options);
   const spike = await getActiveSpike(options);
   const context = await loadSpikeContext(spike);
-  const client =
-    options.client ??
-    createAnthropicClient({
-      apiKey: (options.env ?? process.env)[config.apiKeyEnv],
-      model: config.model,
-    });
+  const client = await resolveShowClient(config, options);
+  const model = client.model ?? config.model;
   const promptValues = {
     problem: context.problem,
     persona: context.persona,
@@ -73,17 +81,17 @@ export async function showCommand(
   const [script, questions, seedData] = await Promise.all([
     generateShowText(
       client,
-      config.model,
+      model,
       scriptPrompt,
       "walkthrough script",
     ),
     generateShowText(
       client,
-      config.model,
+      model,
       questionsPrompt,
       "interview questions",
     ),
-    generateSeedData(client, config.model, seedDataPrompt),
+    generateSeedData(client, model, seedDataPrompt),
   ]);
 
   const showDir = path.join(spike.hunchDir, "show");
@@ -110,6 +118,22 @@ export async function showCommand(
     server.stop();
     await server.wait;
   }
+}
+
+async function resolveShowClient(
+  config: HunchConfig,
+  options: ShowCommandOptions,
+): Promise<ShowClient> {
+  if (options.client) {
+    return options.client;
+  }
+
+  const { client } = await (options.resolveClient ?? resolveAgentClient)({
+    config,
+    preference: providerPreferenceFromFlags(options),
+    env: options.env,
+  });
+  return client;
 }
 
 async function generateShowText(

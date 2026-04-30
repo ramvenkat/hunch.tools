@@ -26,6 +26,7 @@ describe("buildCli", () => {
         "ask",
         "decide",
         "show",
+        "local",
       ]),
     );
   });

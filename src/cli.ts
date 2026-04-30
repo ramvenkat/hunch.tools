@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { askCommand } from "./commands/ask.js";
 import { decideCommand } from "./commands/decide.js";
 import { listCommand } from "./commands/list.js";
+import { localSetupCommand, localStatusCommand } from "./commands/local.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
 import { runCommand } from "./commands/run.js";
@@ -49,10 +50,12 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .argument("[message...]", "Message to send to the active spike agent.")
     .description("Ask the active spike agent for help.")
     .option("--verbose", "Print tool activity.")
+    .option("--local", "Use the local model.")
+    .option("--cloud", "Use Anthropic.")
     .action(
       (
         messageParts: string[] | undefined,
-        commandOptions: { verbose?: boolean },
+        commandOptions: { verbose?: boolean; local?: boolean; cloud?: boolean },
       ) =>
         askCommand(messageParts?.join(" "), {
           ...options,
@@ -68,7 +71,29 @@ export function buildCli(options: PathResolverOptions = {}): Command {
   program
     .command("show")
     .description("Prepare the active spike for a customer interview.")
-    .action(() => showCommand(options));
+    .option("--local", "Use the local model.")
+    .option("--cloud", "Use Anthropic.")
+    .action((commandOptions: { local?: boolean; cloud?: boolean }) =>
+      showCommand({ ...options, ...commandOptions }),
+    );
+
+  const local = program
+    .command("local")
+    .description("Manage the local model used before cloud fallback.");
+
+  local
+    .command("status")
+    .description("Show local model readiness.")
+    .action(async () => {
+      await localStatusCommand(options);
+    });
+
+  local
+    .command("setup")
+    .description("Install the configured local model.")
+    .action(async () => {
+      await localSetupCommand(options);
+    });
 
   return program;
 }

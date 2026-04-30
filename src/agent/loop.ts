@@ -1,4 +1,3 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type {
   ContentBlockParam,
   MessageParam,
@@ -7,7 +6,6 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages/messages";
 import path from "node:path";
 
-import { loadConfig } from "../state/config.js";
 import type { SpikeRef } from "../state/spike.js";
 import { toolDefinitions } from "../tools/definitions.js";
 import {
@@ -23,6 +21,7 @@ import {
 import { runShellTool, type RunShellToolInput } from "../tools/shell.js";
 import { appendDecision, type DecisionInput } from "../tools/ux-decisions.js";
 import { HunchError } from "../utils/errors.js";
+import type { AgentProviderClient } from "./client.js";
 import { timestamp } from "../utils/time.js";
 import { loadSpikeContext } from "./context.js";
 import { loadPrompt } from "./prompts.js";
@@ -30,7 +29,7 @@ import { appendSessionEvent, readRecentSession } from "./session.js";
 import type { SessionEvent } from "./types.js";
 
 export interface RunAgentLoopOptions {
-  client: Anthropic;
+  client: AgentProviderClient;
   spike: SpikeRef;
   message: string;
   verbose?: boolean;
@@ -48,7 +47,6 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 10;
 export async function runAgentLoop(
   options: RunAgentLoopOptions,
 ): Promise<string> {
-  const config = await loadConfig();
   const context = await loadSpikeContext(options.spike);
   const system = await loadPrompt("main", {
     problem: context.problem,
@@ -74,7 +72,7 @@ export async function runAgentLoop(
 
   while (true) {
     const response = await createMessage(options.client, {
-      model: config.model,
+      model: options.client.model,
       system,
       messages,
     });
@@ -213,7 +211,7 @@ function sessionEvent(
 }
 
 async function createMessage(
-  client: Anthropic,
+  client: AgentProviderClient,
   input: { model: string; system: string; messages: MessageParam[] },
 ) {
   try {
@@ -225,8 +223,14 @@ async function createMessage(
       messages: [...input.messages],
     });
   } catch (error) {
-    throw new HunchError(`Anthropic request failed: ${errorMessage(error)}`);
+    throw new HunchError(
+      `${providerLabel(client.provider)} request failed: ${errorMessage(error)}`,
+    );
   }
+}
+
+function providerLabel(provider: AgentProviderClient["provider"]): string {
+  return provider === "anthropic" ? "Anthropic" : "Local";
 }
 
 function assistantSessionEvent(contentBlocks: ContentBlockParam[]): SessionEvent {
