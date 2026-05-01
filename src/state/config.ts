@@ -5,14 +5,19 @@ import YAML from "yaml";
 import { HunchError } from "../utils/errors.js";
 import { createPathResolver, type PathResolverOptions } from "./paths.js";
 
-export type ProviderMode = "auto" | "local" | "anthropic";
-export type FallbackProvider = "anthropic";
+export type ProviderMode = "auto" | "local" | "anthropic" | "openai";
+export type FallbackProvider = "anthropic" | "openai";
 
 export interface LocalConfig {
   enabled: boolean;
   modelPath: string;
   modelUrl: string;
   model: string;
+}
+
+export interface OpenAIConfig {
+  model: string;
+  apiKeyEnv: string;
 }
 
 export interface HunchConfig {
@@ -22,6 +27,7 @@ export interface HunchConfig {
   apiKeyEnv: string;
   spikeDir: string;
   local: LocalConfig;
+  openai: OpenAIConfig;
   pushBackOnScopeCreep: boolean;
   logDecisions: boolean;
 }
@@ -64,6 +70,10 @@ export async function loadConfig(
       modelUrl: parsed.local?.model_url ?? "",
       model: parsed.local?.model ?? "hunch-lite",
     },
+    openai: {
+      model: parsed.openai?.model ?? "gpt-5.4-mini",
+      apiKeyEnv: parsed.openai?.api_key_env ?? "OPENAI_API_KEY",
+    },
     pushBackOnScopeCreep:
       parsed.agent?.push_back_on_scope_creep ??
       parsed.push_back_on_scope_creep ??
@@ -83,6 +93,10 @@ interface ConfigYaml {
     model_path?: string;
     model_url?: string;
     model?: string;
+  };
+  openai?: {
+    model?: string;
+    api_key_env?: string;
   };
   push_back_on_scope_creep?: boolean;
   log_decisions?: boolean;
@@ -107,16 +121,22 @@ function parseConfig(value: unknown): ConfigYaml {
     if (
       value.provider !== "auto" &&
       value.provider !== "local" &&
-      value.provider !== "anthropic"
+      value.provider !== "anthropic" &&
+      value.provider !== "openai"
     ) {
-      throw invalidConfig('provider must be "auto", "local", or "anthropic"');
+      throw invalidConfig(
+        'provider must be "auto", "local", "anthropic", or "openai"',
+      );
     }
     config.provider = value.provider;
   }
 
   if ("fallback_provider" in value) {
-    if (value.fallback_provider !== "anthropic") {
-      throw invalidConfig('fallback_provider must be "anthropic"');
+    if (
+      value.fallback_provider !== "anthropic" &&
+      value.fallback_provider !== "openai"
+    ) {
+      throw invalidConfig('fallback_provider must be "anthropic" or "openai"');
     }
     config.fallback_provider = value.fallback_provider;
   }
@@ -177,6 +197,28 @@ function parseConfig(value: unknown): ConfigYaml {
 
     if ("model" in value.local) {
       config.local.model = readOptionalString(value.local.model, "local.model");
+    }
+  }
+
+  if ("openai" in value) {
+    if (!isRecord(value.openai)) {
+      throw invalidConfig("openai must be an object");
+    }
+
+    config.openai = {};
+
+    if ("model" in value.openai) {
+      config.openai.model = readOptionalString(
+        value.openai.model,
+        "openai.model",
+      );
+    }
+
+    if ("api_key_env" in value.openai) {
+      config.openai.api_key_env = readOptionalString(
+        value.openai.api_key_env,
+        "openai.api_key_env",
+      );
     }
   }
 

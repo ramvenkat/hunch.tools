@@ -45,6 +45,8 @@ export interface ShowCommandOptions extends PathResolverOptions {
   env?: NodeJS.ProcessEnv;
   local?: boolean;
   cloud?: boolean;
+  anthropic?: boolean;
+  openai?: boolean;
   resolveClient?: (
     options: ResolveAgentClientOptions,
   ) => Promise<ResolvedAgentClient>;

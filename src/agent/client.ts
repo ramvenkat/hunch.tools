@@ -3,7 +3,7 @@ import type {
   MessageParam,
 } from "@anthropic-ai/sdk/resources/messages/messages";
 
-export type ProviderName = "local" | "anthropic";
+export type ProviderName = "local" | "anthropic" | "openai";
 
 export interface AgentSystemTextBlock {
   type: "text";

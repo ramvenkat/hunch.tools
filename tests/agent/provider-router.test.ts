@@ -29,6 +29,35 @@ describe("resolveAgentClient", () => {
     });
   });
 
+  it("uses OpenAI when OpenAI is requested", async () => {
+    const createOpenAIClient = vi.fn(() => fakeClient("openai"));
+
+    await expect(
+      resolveAgentClient({
+        config: makeConfig({ provider: "auto" }),
+        preference: "openai",
+        env: { OPENAI_API_KEY: "openai-key" },
+        createOpenAIClient,
+      }),
+    ).resolves.toMatchObject({ provider: "openai" });
+
+    expect(createOpenAIClient).toHaveBeenCalledWith({
+      apiKey: "openai-key",
+      model: "gpt-5.4-mini",
+    });
+  });
+
+  it("uses the configured cloud fallback when cloud is requested", async () => {
+    await expect(
+      resolveAgentClient({
+        config: makeConfig({ provider: "auto", fallbackProvider: "openai" }),
+        preference: "cloud",
+        env: { OPENAI_API_KEY: "openai-key" },
+        createOpenAIClient: () => fakeClient("openai"),
+      }),
+    ).resolves.toMatchObject({ provider: "openai" });
+  });
+
   it("uses local when local is requested and ready", async () => {
     const modelPath = await writeModel();
     const createLocalClient = vi.fn(() => fakeClient("local"));
@@ -67,21 +96,25 @@ describe("resolveAgentClient", () => {
     ).resolves.toMatchObject({ provider: "local" });
   });
 
-  it("falls back to Anthropic in auto mode when local is missing", async () => {
-    const createAnthropicClient = vi.fn(() => fakeClient("anthropic"));
+  it("falls back to the configured cloud provider in auto mode when local is missing", async () => {
+    const createOpenAIClient = vi.fn(() => fakeClient("openai"));
 
     await expect(
       resolveAgentClient({
-        config: makeConfig({ provider: "auto", modelPath: "/missing/model.gguf" }),
-        env: { ANTHROPIC_API_KEY: "key" },
-        createAnthropicClient,
+        config: makeConfig({
+          provider: "auto",
+          fallbackProvider: "openai",
+          modelPath: "/missing/model.gguf",
+        }),
+        env: { OPENAI_API_KEY: "openai-key" },
+        createOpenAIClient,
       }),
     ).resolves.toMatchObject({
-      provider: "anthropic",
+      provider: "openai",
       fallbackReason: "local model is not installed",
     });
 
-    expect(createAnthropicClient).toHaveBeenCalledOnce();
+    expect(createOpenAIClient).toHaveBeenCalledOnce();
   });
 
   it("falls back to Anthropic in auto mode when local is disabled", async () => {
@@ -108,13 +141,14 @@ async function writeModel(): Promise<string> {
 function makeConfig(
   options: {
     provider?: ProviderPreference;
+    fallbackProvider?: "anthropic" | "openai";
     modelPath?: string;
     localEnabled?: boolean;
   } = {},
 ): HunchConfig {
   return {
     provider: options.provider === "cloud" ? "auto" : (options.provider ?? "auto"),
-    fallbackProvider: "anthropic",
+    fallbackProvider: options.fallbackProvider ?? "anthropic",
     model: "claude-3-5-sonnet-latest",
     apiKeyEnv: "ANTHROPIC_API_KEY",
     spikeDir: "/spikes",
@@ -123,6 +157,10 @@ function makeConfig(
       modelPath: options.modelPath ?? "/missing/model.gguf",
       modelUrl: "",
       model: "hunch-lite",
+    },
+    openai: {
+      model: "gpt-5.4-mini",
+      apiKeyEnv: "OPENAI_API_KEY",
     },
     pushBackOnScopeCreep: true,
     logDecisions: true,
@@ -134,7 +172,12 @@ function fakeClient(
 ): AgentProviderClient {
   return {
     provider,
-    model: provider === "local" ? "hunch-lite" : "claude-3-5-sonnet-latest",
+    model:
+      provider === "local"
+        ? "hunch-lite"
+        : provider === "openai"
+          ? "gpt-5.4-mini"
+          : "claude-3-5-sonnet-latest",
     messages: {
       create: vi.fn(),
     },

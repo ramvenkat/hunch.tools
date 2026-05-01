@@ -24,7 +24,18 @@ export function buildCli(options: PathResolverOptions = {}): Command {
   program
     .command("new")
     .description("Start a new spike.")
-    .action(() => newCommand(options));
+    .option("--local", "Use the local model for initial generation.")
+    .option("--cloud", "Use the configured cloud fallback for initial generation.")
+    .option("--anthropic", "Use Anthropic for initial generation.")
+    .option("--openai", "Use OpenAI for initial generation.")
+    .action(
+      (commandOptions: {
+        local?: boolean;
+        cloud?: boolean;
+        anthropic?: boolean;
+        openai?: boolean;
+      }) => newCommand({ ...options, ...commandOptions }),
+    );
 
   program
     .command("list")
@@ -51,11 +62,19 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .description("Ask the active spike agent for help.")
     .option("--verbose", "Print tool activity.")
     .option("--local", "Use the local model.")
-    .option("--cloud", "Use Anthropic.")
+    .option("--cloud", "Use the configured cloud fallback.")
+    .option("--anthropic", "Use Anthropic.")
+    .option("--openai", "Use OpenAI.")
     .action(
       (
         messageParts: string[] | undefined,
-        commandOptions: { verbose?: boolean; local?: boolean; cloud?: boolean },
+        commandOptions: {
+          verbose?: boolean;
+          local?: boolean;
+          cloud?: boolean;
+          anthropic?: boolean;
+          openai?: boolean;
+        },
       ) =>
         askCommand(messageParts?.join(" "), {
           ...options,
@@ -72,9 +91,17 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .command("show")
     .description("Prepare the active spike for a customer interview.")
     .option("--local", "Use the local model.")
-    .option("--cloud", "Use Anthropic.")
-    .action((commandOptions: { local?: boolean; cloud?: boolean }) =>
-      showCommand({ ...options, ...commandOptions }),
+    .option("--cloud", "Use the configured cloud fallback.")
+    .option("--anthropic", "Use Anthropic.")
+    .option("--openai", "Use OpenAI.")
+    .action(
+      (commandOptions: {
+        local?: boolean;
+        cloud?: boolean;
+        anthropic?: boolean;
+        openai?: boolean;
+      }) =>
+        showCommand({ ...options, ...commandOptions }),
     );
 
   const local = program

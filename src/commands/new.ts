@@ -15,7 +15,9 @@ import ora from "ora";
 
 import { runAgentLoop } from "../agent/loop.js";
 import {
+  providerPreferenceFromFlags,
   resolveAgentClient,
+  type ProviderPreference,
   type ResolveAgentClientOptions,
 } from "../agent/provider-router.js";
 import { loadConfig, type HunchConfig } from "../state/config.js";
@@ -46,6 +48,7 @@ export interface InitialGenerationOptions {
   resolveClient?: (
     options: ResolveAgentClientOptions,
   ) => ReturnType<typeof resolveAgentClient>;
+  preference?: ProviderPreference;
   runAgent?: typeof runAgentLoop;
 }
 
@@ -64,6 +67,10 @@ export interface CreateSpikeOptions extends PathResolverOptions {
   date?: Date;
   installTimeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  local?: boolean;
+  cloud?: boolean;
+  anthropic?: boolean;
+  openai?: boolean;
   resolveClient?: (
     options: ResolveAgentClientOptions,
   ) => ReturnType<typeof resolveAgentClient>;
@@ -154,6 +161,7 @@ export async function createSpike(
 
     if (options.generate !== false) {
       const env = options.env ?? process.env;
+      const preference = providerPreferenceFromFlags(options);
       const result = await (
         options.initialGenerationRunner ?? runInitialGeneration
       )({
@@ -163,6 +171,7 @@ export async function createSpike(
         apiKey: env[config.apiKeyEnv],
         model: config.model,
         resolveClient: options.resolveClient,
+        preference,
         runAgent: options.runAgent,
       });
 
@@ -269,6 +278,7 @@ async function runInitialGeneration(
   try {
     ({ client } = await (options.resolveClient ?? resolveAgentClient)({
       config: options.config,
+      preference: options.preference,
       env: options.env,
     }));
   } catch (error) {
