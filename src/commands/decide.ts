@@ -138,6 +138,7 @@ async function pushBackOnDecision(
       client,
       spike,
       verbose: options.verbose,
+      progress: true,
       message: [
         "The user pushed back on a pending UX decision.",
         "",

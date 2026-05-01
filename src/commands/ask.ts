@@ -17,6 +17,7 @@ export interface AskCommandOptions extends PathResolverOptions {
   cloud?: boolean;
   anthropic?: boolean;
   openai?: boolean;
+  maxToolIterations?: number;
   env?: NodeJS.ProcessEnv;
   resolveClient?: (
     options: ResolveAgentClientOptions,
@@ -39,7 +40,14 @@ export async function askCommand(
   const runAgent = options.runAgent ?? runAgentLoop;
 
   if (message !== undefined && message.trim().length > 0) {
-    await runAgent({ client, spike, message, verbose: options.verbose });
+    await runAgent({
+      client,
+      spike,
+      message,
+      verbose: options.verbose,
+      progress: true,
+      maxToolIterations: options.maxToolIterations,
+    });
     process.stdout.write("\n");
     return;
   }
@@ -55,6 +63,8 @@ export async function askCommand(
       spike,
       message: nextMessage,
       verbose: options.verbose,
+      progress: true,
+      maxToolIterations: options.maxToolIterations,
     });
     process.stdout.write("\n");
   }
