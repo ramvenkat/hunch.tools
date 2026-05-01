@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createSpike } from "../../src/commands/new.js";
 
@@ -17,6 +17,7 @@ const originalPath = process.env.PATH;
 const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
 
 afterEach(() => {
+  vi.restoreAllMocks();
   process.env.PATH = originalPath;
   if (originalAnthropicApiKey === undefined) {
     delete process.env.ANTHROPIC_API_KEY;
@@ -221,9 +222,9 @@ describe("createSpike", () => {
     ]);
   });
 
-  it("skips initial generation silently when no API key is configured", async () => {
+  it("warns when no model provider can generate the initial prototype", async () => {
     const homeDir = await makeHome();
-    let calls = 0;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     const spike = await createSpike(
       {
@@ -238,13 +239,12 @@ describe("createSpike", () => {
         install: false,
         date: new Date("2026-04-25T12:00:00Z"),
         env: {},
-        initialGenerationRunner: async () => {
-          calls += 1;
-        },
       },
     );
 
-    expect(calls).toBe(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("Skipped initial prototype generation"),
+    );
     expect(spike.name).toBe("2026-04-25-no-api-key");
     await expect(readFile(join(homeDir, ".hunch", "active"), "utf8")).resolves
       .toBe("2026-04-25-no-api-key\n");
@@ -284,7 +284,7 @@ describe("createSpike", () => {
             spikeDir: spike.dir,
             appDir: spike.appDir,
             hunchDir: spike.hunchDir,
-            apiKey,
+            apiKey: apiKey ?? "",
             model,
           });
           await stat(spike.appDir);
