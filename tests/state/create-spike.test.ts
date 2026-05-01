@@ -303,6 +303,32 @@ describe("createSpike", () => {
     expect(finalStats.isDirectory()).toBe(true);
   });
 
+  it("passes provider preferences into initial generation", async () => {
+    const homeDir = await makeHome();
+    let preference: string | undefined;
+
+    await createSpike(
+      {
+        problem: "Users need OpenAI-backed first drafts.",
+        persona: "PMs.",
+        journey: "Open the prototype.",
+        slug: "openai-generation",
+      },
+      {
+        homeDir,
+        cwd: process.cwd(),
+        install: false,
+        date: new Date("2026-04-25T12:00:00Z"),
+        openai: true,
+        initialGenerationRunner: async (options) => {
+          preference = options.preference;
+        },
+      },
+    );
+
+    expect(preference).toBe("openai");
+  });
+
   it("cleans up and does not set active when initial generation fails", async () => {
     const homeDir = await makeHome();
 

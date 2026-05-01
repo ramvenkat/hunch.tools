@@ -4,6 +4,10 @@ import {
 } from "./anthropic.js";
 import type { AgentProviderClient } from "./client.js";
 import {
+  createOpenAIClient as createDefaultOpenAIClient,
+  type OpenAIClientOptions,
+} from "./openai.js";
+import {
   createLocalClient as createDefaultLocalClient,
   getLocalModelStatus,
   type LocalModelDeps,
@@ -21,6 +25,7 @@ export interface ResolveAgentClientOptions {
   createAnthropicClient?: (
     options: AnthropicClientOptions,
   ) => AgentProviderClient;
+  createOpenAIClient?: (options: OpenAIClientOptions) => AgentProviderClient;
   createLocalClient?: (config: HunchConfig) => AgentProviderClient;
 }
 
@@ -35,11 +40,12 @@ export async function resolveAgentClient(
 ): Promise<ResolvedAgentClient> {
   const preference = options.preference ?? options.config.provider;
 
-  if (preference === "cloud" || preference === "anthropic") {
-    return {
-      client: createAnthropicProvider(options),
-      provider: "anthropic",
-    };
+  if (preference === "cloud") {
+    return resolveCloudProvider(options, options.config.fallbackProvider);
+  }
+
+  if (preference === "anthropic" || preference === "openai") {
+    return resolveCloudProvider(options, preference);
   }
 
   if (preference === "local") {
@@ -48,6 +54,13 @@ export async function resolveAgentClient(
       client: createLocalProvider(options),
       provider: "local",
     };
+  }
+
+  if (
+    options.config.provider === "anthropic" ||
+    options.config.provider === "openai"
+  ) {
+    return resolveCloudProvider(options, options.config.provider);
   }
 
   const status = await getLocalModelStatus(
@@ -61,32 +74,52 @@ export async function resolveAgentClient(
     };
   }
 
+  const cloud = resolveCloudProvider(options, options.config.fallbackProvider);
   return {
-    client: createAnthropicProvider(options),
-    provider: "anthropic",
+    ...cloud,
     fallbackReason: status.enabled
       ? "local model is not installed"
       : "local model is disabled",
   };
 }
 
+function resolveCloudProvider(
+  options: ResolveAgentClientOptions,
+  provider: "anthropic" | "openai",
+): ResolvedAgentClient {
+  if (provider === "openai") {
+    return {
+      client: createOpenAIProvider(options),
+      provider: "openai",
+    };
+  }
+
+  return {
+    client: createAnthropicProvider(options),
+    provider: "anthropic",
+  };
+}
+
 export function providerPreferenceFromFlags(options: {
   local?: boolean;
   cloud?: boolean;
+  anthropic?: boolean;
+  openai?: boolean;
 }): ProviderPreference | undefined {
-  if (options.local && options.cloud) {
-    throw new HunchError("Choose either --local or --cloud, not both.");
+  const selected = [
+    options.local ? "local" : undefined,
+    options.cloud ? "cloud" : undefined,
+    options.anthropic ? "anthropic" : undefined,
+    options.openai ? "openai" : undefined,
+  ].filter(Boolean);
+
+  if (selected.length > 1) {
+    throw new HunchError(
+      "Choose only one provider flag: --local, --cloud, --anthropic, or --openai.",
+    );
   }
 
-  if (options.local) {
-    return "local";
-  }
-
-  if (options.cloud) {
-    return "cloud";
-  }
-
-  return undefined;
+  return selected[0] as ProviderPreference | undefined;
 }
 
 async function assertLocalReady(
@@ -96,7 +129,6 @@ async function assertLocalReady(
     options.config,
     options.localModelDeps,
   );
-
   if (status.ready) {
     return;
   }
@@ -122,6 +154,17 @@ function createAnthropicProvider(
   return factory({
     apiKey: (options.env ?? process.env)[options.config.apiKeyEnv],
     model: options.config.model,
+  });
+}
+
+function createOpenAIProvider(
+  options: ResolveAgentClientOptions,
+): AgentProviderClient {
+  const factory = options.createOpenAIClient ?? createDefaultOpenAIClient;
+
+  return factory({
+    apiKey: (options.env ?? process.env)[options.config.openai.apiKeyEnv],
+    model: options.config.openai.model,
   });
 }
 

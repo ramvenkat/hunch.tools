@@ -12,9 +12,20 @@ import { HunchError } from "../../src/utils/errors.js";
 vi.mock("../../src/state/config.js", () => ({
   loadConfig: vi.fn(async () => ({
     provider: "anthropic",
+    fallbackProvider: "anthropic",
     model: "claude-test",
     apiKeyEnv: "ANTHROPIC_API_KEY",
     spikeDir: "/unused",
+    local: {
+      enabled: true,
+      modelPath: "/unused/model.gguf",
+      modelUrl: "",
+      model: "hunch-lite",
+    },
+    openai: {
+      model: "gpt-5.4-mini",
+      apiKeyEnv: "OPENAI_API_KEY",
+    },
     pushBackOnScopeCreep: true,
     logDecisions: true,
   })),

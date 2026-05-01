@@ -76,12 +76,50 @@ describe("askCommand", () => {
     );
   });
 
+  it("routes a one-shot message through OpenAI when requested", async () => {
+    const { homeDir } = await setupActiveSpike();
+    const client = fakeClient("openai");
+    const resolveClient = vi.fn().mockResolvedValue({ client, provider: "openai" });
+
+    await askCommand("hello", {
+      homeDir,
+      cwd: "/repo",
+      openai: true,
+      resolveClient,
+      runAgent: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(resolveClient).toHaveBeenCalledWith(
+      expect.objectContaining({ preference: "openai" }),
+    );
+  });
+
+  it("routes a one-shot message through Anthropic when requested", async () => {
+    const { homeDir } = await setupActiveSpike();
+    const client = fakeClient("anthropic");
+    const resolveClient = vi
+      .fn()
+      .mockResolvedValue({ client, provider: "anthropic" });
+
+    await askCommand("hello", {
+      homeDir,
+      cwd: "/repo",
+      anthropic: true,
+      resolveClient,
+      runAgent: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(resolveClient).toHaveBeenCalledWith(
+      expect.objectContaining({ preference: "anthropic" }),
+    );
+  });
+
   it("rejects conflicting provider flags", async () => {
     const { homeDir } = await setupActiveSpike();
 
     await expect(
       askCommand("hello", { homeDir, cwd: "/repo", local: true, cloud: true }),
-    ).rejects.toThrow(/either --local or --cloud/);
+    ).rejects.toThrow(/Choose only one provider flag/);
   });
 });
 
@@ -112,7 +150,12 @@ function fakeClient(
 ): AgentProviderClient {
   return {
     provider,
-    model: provider === "local" ? "hunch-lite" : "claude-3-5-sonnet-latest",
+    model:
+      provider === "local"
+        ? "hunch-lite"
+        : provider === "openai"
+          ? "gpt-5.4-mini"
+          : "claude-3-5-sonnet-latest",
     messages: {
       create: vi.fn(),
     },

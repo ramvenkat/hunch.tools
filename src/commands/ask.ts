@@ -15,6 +15,8 @@ export interface AskCommandOptions extends PathResolverOptions {
   verbose?: boolean;
   local?: boolean;
   cloud?: boolean;
+  anthropic?: boolean;
+  openai?: boolean;
   env?: NodeJS.ProcessEnv;
   resolveClient?: (
     options: ResolveAgentClientOptions,

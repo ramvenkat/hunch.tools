@@ -25,6 +25,10 @@ describe("loadConfig", () => {
         modelUrl: "",
         model: "hunch-lite",
       },
+      openai: {
+        model: "gpt-5.4-mini",
+        apiKeyEnv: "OPENAI_API_KEY",
+      },
       pushBackOnScopeCreep: true,
       logDecisions: true,
     });
@@ -58,8 +62,37 @@ describe("loadConfig", () => {
         modelUrl: "",
         model: "hunch-lite",
       },
+      openai: {
+        model: "gpt-5.4-mini",
+        apiKeyEnv: "OPENAI_API_KEY",
+      },
       pushBackOnScopeCreep: false,
       logDecisions: false,
+    });
+  });
+
+  it("reads OpenAI provider options", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(
+      join(homeDir, ".hunch", "config.yaml"),
+      [
+        "provider: openai",
+        "fallback_provider: openai",
+        "openai:",
+        "  model: gpt-4.1",
+        "  api_key_env: CUSTOM_OPENAI_KEY",
+        "",
+      ].join("\n"),
+    );
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).resolves.toMatchObject({
+      provider: "openai",
+      fallbackProvider: "openai",
+      openai: {
+        model: "gpt-4.1",
+        apiKeyEnv: "CUSTOM_OPENAI_KEY",
+      },
     });
   });
 
@@ -127,7 +160,7 @@ describe("loadConfig", () => {
   it("rejects unsupported providers", async () => {
     const homeDir = await makeHome();
     await mkdir(join(homeDir, ".hunch"));
-    await writeFile(join(homeDir, ".hunch", "config.yaml"), "provider: openai\n");
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), "provider: gemini\n");
 
     await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
       /Invalid Hunch config: provider/,
@@ -139,7 +172,7 @@ describe("loadConfig", () => {
     await mkdir(join(homeDir, ".hunch"));
     await writeFile(
       join(homeDir, ".hunch", "config.yaml"),
-      "fallback_provider: openai\n",
+      "fallback_provider: gemini\n",
     );
 
     await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
@@ -204,6 +237,16 @@ describe("loadConfig", () => {
     );
   });
 
+  it("rejects non-object OpenAI config", async () => {
+    const homeDir = await makeHome();
+    await mkdir(join(homeDir, ".hunch"));
+    await writeFile(join(homeDir, ".hunch", "config.yaml"), "openai: true\n");
+
+    await expect(loadConfig({ homeDir, cwd: "/repo" })).rejects.toThrow(
+      /Invalid Hunch config: openai/,
+    );
+  });
+
   it("rejects invalid local enabled values", async () => {
     const homeDir = await makeHome();
     await mkdir(join(homeDir, ".hunch"));
@@ -221,6 +264,11 @@ describe("loadConfig", () => {
     ["local.model_path", ["local:", '  model_path: ""', ""].join("\n")],
     ["local.model_url", ["local:", '  model_url: ""', ""].join("\n")],
     ["local.model", ["local:", '  model: "   "', ""].join("\n")],
+    ["openai.model", ["openai:", '  model: ""', ""].join("\n")],
+    [
+      "openai.api_key_env",
+      ["openai:", '  api_key_env: "   "', ""].join("\n"),
+    ],
   ])("rejects blank %s values", async (key, yaml) => {
     const homeDir = await makeHome();
     await mkdir(join(homeDir, ".hunch"));

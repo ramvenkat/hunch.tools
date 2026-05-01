@@ -230,7 +230,15 @@ async function createMessage(
 }
 
 function providerLabel(provider: AgentProviderClient["provider"]): string {
-  return provider === "anthropic" ? "Anthropic" : "Local";
+  if (provider === "anthropic") {
+    return "Anthropic";
+  }
+
+  if (provider === "openai") {
+    return "OpenAI";
+  }
+
+  return "Local";
 }
 
 function assistantSessionEvent(contentBlocks: ContentBlockParam[]): SessionEvent {

@@ -28,8 +28,8 @@ spike:
 - prepare a walkthrough, interview questions, and demo data
 
 The differentiator is the local-first provider path. Hunch can run with a tiny
-local GGUF model when configured, then fall back to Anthropic when local
-inference is unavailable or you explicitly ask for cloud.
+local GGUF model when configured, then fall back to Anthropic or OpenAI when
+local inference is unavailable or you explicitly ask for cloud.
 
 ## Install
 
@@ -39,10 +39,11 @@ npm install -g hunch-cli
 
 Hunch requires Node 20 or newer.
 
-For cloud fallback, set an Anthropic API key:
+For cloud fallback, set an Anthropic or OpenAI API key:
 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
 ```
 
 For local inference, place a GGUF model at the configured local model path or
@@ -102,9 +103,10 @@ starts the prototype in demo mode.
 Hunch supports three provider modes:
 
 - `auto`: use local when the configured GGUF model is installed, otherwise use
-  Anthropic.
+  the configured cloud fallback.
 - `local`: require the local model.
 - `anthropic`: always use Anthropic.
+- `openai`: always use OpenAI.
 
 The default is `auto`.
 
@@ -113,8 +115,13 @@ You can force a provider per command:
 ```sh
 hunch ask --local "tighten the empty state"
 hunch ask --cloud "use the cloud model for this harder edit"
+hunch ask --openai "use my OpenAI credits for this edit"
+hunch ask --anthropic "use Anthropic for this edit"
+hunch new --openai
 hunch show --local
 hunch show --cloud
+hunch show --openai
+hunch show --anthropic
 ```
 
 Check local readiness:
@@ -139,6 +146,9 @@ while still making the local path available where it works.
 
 Starts a new spike from a customer problem, persona, and journey. The active
 spike is updated after setup succeeds.
+
+Use `--openai`, `--anthropic`, `--cloud`, or `--local` to choose the provider
+for initial prototype generation.
 
 ### `hunch run`
 
@@ -213,14 +223,16 @@ Customize defaults in `~/.hunch/config.yaml`:
 ```yaml
 provider: auto
 fallback_provider: anthropic
-model: claude-3-5-sonnet-latest
+model: claude-sonnet-4-6
 api_key_env: ANTHROPIC_API_KEY
 spike_dir: ~/hunches
 local:
   enabled: true
   model_path: ~/.hunch/models/hunch-lite.gguf
-  model_url: ""
   model: hunch-lite
+openai:
+  model: gpt-5.4-mini
+  api_key_env: OPENAI_API_KEY
 ```
 
 Each spike looks roughly like this:
@@ -287,10 +299,11 @@ npm_config_cache=/tmp/hunch-npm-cache npm pack --dry-run
 
 - Local inference requires a GGUF model file and a machine that can run
   `node-llama-cpp`.
-- Anthropic is the only cloud fallback provider.
+- Anthropic and OpenAI are the supported cloud providers.
 - Spikes are local directories; there is no cloud sync or team workflow yet.
 - The generated app template is intentionally small.
-- Live cloud fallback requires `ANTHROPIC_API_KEY`.
+- Live cloud fallback requires `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`,
+  depending on the selected provider.
 
 ## License
 

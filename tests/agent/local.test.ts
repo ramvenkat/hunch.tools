@@ -219,6 +219,10 @@ function makeConfig(modelPath: string, modelUrl = ""): HunchConfig {
       modelUrl,
       model: "hunch-lite",
     },
+    openai: {
+      model: "gpt-5.4-mini",
+      apiKeyEnv: "OPENAI_API_KEY",
+    },
     pushBackOnScopeCreep: true,
     logDecisions: true,
   };
