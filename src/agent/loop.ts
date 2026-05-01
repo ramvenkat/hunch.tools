@@ -33,6 +33,7 @@ export interface RunAgentLoopOptions {
   spike: SpikeRef;
   message: string;
   verbose?: boolean;
+  progress?: boolean;
   maxToolIterations?: number;
 }
 
@@ -42,7 +43,7 @@ interface ToolRunResult {
   rawResult?: unknown;
 }
 
-const DEFAULT_MAX_TOOL_ITERATIONS = 10;
+const DEFAULT_MAX_TOOL_ITERATIONS = 50;
 
 export async function runAgentLoop(
   options: RunAgentLoopOptions,
@@ -71,6 +72,10 @@ export async function runAgentLoop(
     options.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
 
   while (true) {
+    writeProgress(
+      options,
+      `Thinking with ${providerLabel(options.client.provider)} ${options.client.model}...`,
+    );
     const response = await createMessage(options.client, {
       model: options.client.model,
       system,
@@ -100,6 +105,12 @@ export async function runAgentLoop(
     }
 
     if (response.stop_reason !== "tool_use") {
+      if (finalText.length === 0 && toolUses.length === 0) {
+        writeProgress(
+          options,
+          "The model returned no text or tool calls. Try again, or rerun with --verbose if this keeps happening.",
+        );
+      }
       break;
     }
 
@@ -113,6 +124,7 @@ export async function runAgentLoop(
 
     const toolResults: ToolResultBlockParam[] = [];
     for (const toolUse of toolUses) {
+      writeProgress(options, `Running ${describeToolUse(toolUse)}...`);
       const result = await runTool(options.spike, toolUse);
       await appendSessionEvent(sessionFile, {
         ...sessionEvent("tool", result.content),
@@ -133,6 +145,13 @@ export async function runAgentLoop(
         process.stderr.write(
           `[hunch] ${toolUse.name}: ${result.content}\n`,
         );
+      } else {
+        writeProgress(
+          options,
+          result.isError
+            ? `${toolUse.name} failed: ${result.content}`
+            : `${toolUse.name} finished.`,
+        );
       }
     }
 
@@ -143,12 +162,51 @@ export async function runAgentLoop(
 
     if (toolIterations >= maxToolIterations) {
       throw new HunchError(
-        `Agent exceeded maximum tool iterations of ${maxToolIterations}.`,
+        `Agent exceeded maximum tool iterations of ${maxToolIterations}. Retry with --max-tool-iterations ${maxToolIterations * 2} if this is an intentionally large prototype pass.`,
       );
     }
   }
 
   return finalText;
+}
+
+function writeProgress(
+  options: Pick<RunAgentLoopOptions, "progress">,
+  message: string,
+): void {
+  if (options.progress !== true) {
+    return;
+  }
+
+  process.stderr.write(`[hunch] ${message}\n`);
+}
+
+function describeToolUse(toolUse: ToolUseBlock): string {
+  const input = isRecord(toolUse.input) ? toolUse.input : {};
+  const pathValue = typeof input.path === "string" ? input.path : undefined;
+
+  switch (toolUse.name) {
+    case "read_file":
+      return `read_file ${pathValue ?? ""}`.trim();
+    case "write_file":
+      return `write_file ${pathValue ?? ""}`.trim();
+    case "edit_file":
+      return `edit_file ${pathValue ?? ""}`.trim();
+    case "list_files":
+      return `list_files ${pathValue ?? "."}`.trim();
+    case "run_shell":
+      return typeof input.command === "string"
+        ? `run_shell ${input.command}`
+        : "run_shell";
+    case "decide":
+      return "decide";
+    case "generate_seed_data":
+      return "generate_seed_data";
+    case "push_back":
+      return "push_back";
+    default:
+      return toolUse.name;
+  }
 }
 
 function sessionEventsToMessages(events: SessionEvent[]): MessageParam[] {
@@ -367,6 +425,10 @@ function requireRecord(value: unknown, toolName: string): Record<string, unknown
   }
 
   return value as Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requireString(

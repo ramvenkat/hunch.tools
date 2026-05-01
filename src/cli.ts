@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 
 import { askCommand } from "./commands/ask.js";
 import { decideCommand } from "./commands/decide.js";
@@ -65,6 +65,11 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     .option("--cloud", "Use the configured cloud fallback.")
     .option("--anthropic", "Use Anthropic.")
     .option("--openai", "Use OpenAI.")
+    .option(
+      "--max-tool-iterations <count>",
+      "Maximum agent tool batches before stopping.",
+      parsePositiveInteger,
+    )
     .action(
       (
         messageParts: string[] | undefined,
@@ -74,6 +79,7 @@ export function buildCli(options: PathResolverOptions = {}): Command {
           cloud?: boolean;
           anthropic?: boolean;
           openai?: boolean;
+          maxToolIterations?: number;
         },
       ) =>
         askCommand(messageParts?.join(" "), {
@@ -123,6 +129,15 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     });
 
   return program;
+}
+
+function parsePositiveInteger(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new InvalidArgumentError("Expected a positive integer.");
+  }
+
+  return parsed;
 }
 
 export async function runCli(

@@ -165,11 +165,14 @@ describe("decideCommand", () => {
     expect(input).toHaveBeenCalledWith({
       message: "What pushback should the agent address?",
     });
-    expect(runAgent).toHaveBeenCalledWith({
-      client,
-      spike: expect.objectContaining({ name: "2026-04-25-decide" }),
-      message: expect.stringContaining("Use cards"),
-    });
+    expect(runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client,
+        spike: expect.objectContaining({ name: "2026-04-25-decide" }),
+        message: expect.stringContaining("Use cards"),
+        progress: true,
+      }),
+    );
     expect(runAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining("This buries the comparison task."),

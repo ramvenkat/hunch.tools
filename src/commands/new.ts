@@ -293,6 +293,7 @@ async function runInitialGeneration(
     await (options.runAgent ?? runAgentLoop)({
       client,
       spike: options.spike,
+      progress: true,
       message:
         "Generate the initial prototype for this spike. Replace the starter app with a focused, clickable flow that tests the journey.",
     });
