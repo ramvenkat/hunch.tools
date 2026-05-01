@@ -3,12 +3,15 @@ import { Command, InvalidArgumentError } from "commander";
 
 import { askCommand } from "./commands/ask.js";
 import { decideCommand } from "./commands/decide.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { listCommand } from "./commands/list.js";
 import { localSetupCommand, localStatusCommand } from "./commands/local.js";
 import { newCommand } from "./commands/new.js";
 import { openCommand } from "./commands/open.js";
 import { runCommand } from "./commands/run.js";
+import { saveCommand } from "./commands/save.js";
 import { showCommand } from "./commands/show.js";
+import { statusCommand } from "./commands/status.js";
 import type { PathResolverOptions } from "./state/paths.js";
 import { out } from "./ui/output.js";
 import { HunchError } from "./utils/errors.js";
@@ -57,6 +60,34 @@ export function buildCli(options: PathResolverOptions = {}): Command {
     );
 
   program
+    .command("status")
+    .description("Show the active spike state.")
+    .action(async () => {
+      await statusCommand(options);
+    });
+
+  program
+    .command("save")
+    .argument("[name]", "Saved prototype folder name.")
+    .description("Save the active spike to a durable folder.")
+    .option("--force", "Overwrite an existing save.")
+    .option("--to <dir>", "Directory where saved prototypes are stored.")
+    .action(
+      (
+        name: string | undefined,
+        commandOptions: { force?: boolean; to?: string },
+      ) => saveCommand(name, { ...options, ...commandOptions }).then(() => undefined),
+    );
+
+  program
+    .command("doctor")
+    .alias("doc")
+    .description("Check Hunch configuration and active spike health.")
+    .action(async () => {
+      await doctorCommand(options);
+    });
+
+  program
     .command("ask")
     .argument("[message...]", "Message to send to the active spike agent.")
     .description("Ask the active spike agent for help.")
@@ -70,6 +101,7 @@ export function buildCli(options: PathResolverOptions = {}): Command {
       "Maximum agent tool batches before stopping.",
       parsePositiveInteger,
     )
+    .option("--repair", "Constrain the agent to repairing a broken spike.")
     .action(
       (
         messageParts: string[] | undefined,
@@ -80,6 +112,7 @@ export function buildCli(options: PathResolverOptions = {}): Command {
           anthropic?: boolean;
           openai?: boolean;
           maxToolIterations?: number;
+          repair?: boolean;
         },
       ) =>
         askCommand(messageParts?.join(" "), {
