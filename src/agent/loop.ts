@@ -44,6 +44,7 @@ interface ToolRunResult {
 }
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 50;
+const MAX_REPEATED_TOOL_FAILURES = 3;
 
 export async function runAgentLoop(
   options: RunAgentLoopOptions,
@@ -68,6 +69,7 @@ export async function runAgentLoop(
   ];
   let finalText = "";
   let toolIterations = 0;
+  const repeatedToolFailures = new Map<string, number>();
   const maxToolIterations =
     options.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
 
@@ -153,6 +155,8 @@ export async function runAgentLoop(
             : `${toolUse.name} finished.`,
         );
       }
+
+      trackRepeatedToolFailure(repeatedToolFailures, toolUse, result);
     }
 
     messages.push({
@@ -168,6 +172,35 @@ export async function runAgentLoop(
   }
 
   return finalText;
+}
+
+function trackRepeatedToolFailure(
+  repeatedToolFailures: Map<string, number>,
+  toolUse: ToolUseBlock,
+  result: ToolRunResult,
+): void {
+  if (!result.isError) {
+    repeatedToolFailures.clear();
+    return;
+  }
+
+  const key = toolFailureKey(toolUse, result);
+  const count = (repeatedToolFailures.get(key) ?? 0) + 1;
+  repeatedToolFailures.set(key, count);
+
+  if (count >= MAX_REPEATED_TOOL_FAILURES) {
+    throw new HunchError(
+      `Agent repeated the same failing ${toolUse.name} call ${count} times: ${result.content}`,
+    );
+  }
+}
+
+function toolFailureKey(toolUse: ToolUseBlock, result: ToolRunResult): string {
+  return JSON.stringify({
+    name: toolUse.name,
+    input: toolUse.input,
+    error: result.content,
+  });
 }
 
 function writeProgress(

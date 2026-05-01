@@ -322,6 +322,59 @@ describe("runAgentLoop", () => {
     );
   });
 
+  it("stops repeated identical tool failures before the iteration cap", async () => {
+    const spike = await makeSpike();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const client = fakeClient([
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_bad_1",
+            name: "write_file",
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_bad_2",
+            name: "write_file",
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_bad_3",
+            name: "write_file",
+            input: {},
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+    ]);
+
+    await expect(
+      runAgentLoop({
+        client,
+        spike,
+        message: "Keep writing invalid files",
+      }),
+    ).rejects.toEqual(
+      new HunchError(
+        "Agent repeated the same failing write_file call 3 times: write_file failed: write_file.path must be a string.",
+      ),
+    );
+    expect(client.messages.create).toHaveBeenCalledTimes(3);
+  });
+
   it("stops after the configured maximum tool iterations", async () => {
     const spike = await makeSpike();
     const client = fakeClient([
