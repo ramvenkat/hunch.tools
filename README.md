@@ -11,6 +11,9 @@ It is built for fast product learning, not production code generation.
 hunch new
 hunch run
 hunch ask "make the onboarding path shorter and more concrete"
+hunch status
+hunch doctor
+hunch save onboarding-spike
 hunch decide
 hunch show
 ```
@@ -81,6 +84,19 @@ Iterate:
 
 ```sh
 hunch ask "make the pricing comparison easier to scan"
+```
+
+Check whether the active spike is healthy:
+
+```sh
+hunch status
+hunch doctor
+```
+
+Save a prototype you want to keep:
+
+```sh
+hunch save pricing-comparison-v1
 ```
 
 Review UX decisions:
@@ -166,6 +182,52 @@ source files, log decisions, generate seed data, and run a narrow install
 command.
 
 Use `--verbose` to print tool activity.
+
+Use `--repair` when a generation left the app broken and you want a constrained
+fix instead of another creative redesign:
+
+```sh
+hunch ask --repair "fix the build error in App.tsx"
+```
+
+Repair mode tells the agent to focus on malformed files, truncated output, build
+errors, and runtime blockers.
+
+### `hunch status`
+
+Shows the active spike name, paths, whether key generated files are present, the
+last recorded agent activity, and the next useful command.
+
+```sh
+hunch status
+```
+
+### `hunch doctor`
+
+Checks the active spike and local environment:
+
+- active spike selection
+- OpenAI and Anthropic API key presence, without printing secrets
+- local model readiness
+- active app build health
+
+```sh
+hunch doctor
+hunch doc
+```
+
+### `hunch save [name]`
+
+Copies the active spike into a durable folder under `~/hunch-saves`, excluding
+generated dependency/build folders such as `node_modules` and `dist`. The save
+also includes a `SAVED.md` summary with the original problem, persona, journey,
+decisions, and run instructions.
+
+```sh
+hunch save infusion-scheduler-v1
+hunch save infusion-scheduler-v1 --force
+hunch save infusion-scheduler-v1 --to ~/Desktop/hunch-keepers
+```
 
 ### `hunch decide`
 
