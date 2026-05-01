@@ -18,6 +18,7 @@ export interface AskCommandOptions extends PathResolverOptions {
   anthropic?: boolean;
   openai?: boolean;
   maxToolIterations?: number;
+  repair?: boolean;
   env?: NodeJS.ProcessEnv;
   resolveClient?: (
     options: ResolveAgentClientOptions,
@@ -43,7 +44,7 @@ export async function askCommand(
     await runAgent({
       client,
       spike,
-      message,
+      message: options.repair ? repairMessage(message) : message,
       verbose: options.verbose,
       progress: true,
       maxToolIterations: options.maxToolIterations,
@@ -61,11 +62,26 @@ export async function askCommand(
     await runAgent({
       client,
       spike,
-      message: nextMessage,
+      message: options.repair ? repairMessage(nextMessage) : nextMessage,
       verbose: options.verbose,
       progress: true,
       maxToolIterations: options.maxToolIterations,
     });
     process.stdout.write("\n");
   }
+}
+
+function repairMessage(message: string): string {
+  return [
+    "Repair mode: fix the active spike with the smallest safe change.",
+    "",
+    "Rules:",
+    "- Do not redesign the prototype.",
+    "- Focus on broken builds, malformed files, truncated files, and obvious runtime blockers.",
+    "- Prefer editing existing files over creating new architecture.",
+    "- Do not read package.json unless the build error specifically requires dependency or script context.",
+    "- After fixing files, run the narrowest useful verification command available.",
+    "",
+    `User repair request: ${message}`,
+  ].join("\n");
 }

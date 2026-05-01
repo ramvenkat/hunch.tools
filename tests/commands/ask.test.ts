@@ -139,6 +139,40 @@ describe("askCommand", () => {
     );
   });
 
+  it("uses a constrained repair prompt when repair mode is requested", async () => {
+    const { homeDir } = await setupActiveSpike();
+    const client = fakeClient("openai");
+    const resolveClient = vi.fn().mockResolvedValue({ client, provider: "openai" });
+    const runAgent = vi.fn().mockResolvedValue(undefined);
+
+    await askCommand("Fix the broken build", {
+      homeDir,
+      cwd: "/repo",
+      openai: true,
+      repair: true,
+      resolveClient,
+      runAgent,
+    });
+
+    expect(runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client,
+        progress: true,
+        message: expect.stringContaining("Repair mode"),
+      }),
+    );
+    expect(runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Fix the broken build"),
+      }),
+    );
+    expect(runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Do not redesign the prototype"),
+      }),
+    );
+  });
+
   it("rejects conflicting provider flags", async () => {
     const { homeDir } = await setupActiveSpike();
 
