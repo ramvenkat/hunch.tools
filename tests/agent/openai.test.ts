@@ -142,4 +142,53 @@ describe("createOpenAIClient", () => {
       }),
     );
   });
+
+  it("treats any response with tool calls as a tool-use turn", async () => {
+    createMock.mockResolvedValueOnce({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function",
+                function: {
+                  name: "write_file",
+                  arguments: '{"path":"app/src/App.tsx","content":"export default function App() { return null; }"}',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const client = createOpenAIClient({
+      apiKey: "test-key",
+      model: "gpt-5.4-mini",
+    });
+
+    await expect(
+      client.messages.create({
+        model: "gpt-5.4-mini",
+        max_tokens: 256,
+        messages: [{ role: "user", content: "Write App" }],
+      }),
+    ).resolves.toEqual({
+      content: [
+        {
+          type: "tool_use",
+          id: "call_1",
+          name: "write_file",
+          input: {
+            path: "app/src/App.tsx",
+            content: "export default function App() { return null; }",
+          },
+        },
+      ],
+      stop_reason: "tool_use",
+    });
+  });
 });

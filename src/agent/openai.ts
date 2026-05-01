@@ -45,8 +45,7 @@ export function createOpenAIClient(
 
         return {
           content: toAgentContent(choice.message),
-          stop_reason:
-            choice.finish_reason === "tool_calls" ? "tool_use" : "end_turn",
+          stop_reason: hasToolCalls(choice.message) ? "tool_use" : "end_turn",
         };
       },
     },
@@ -168,6 +167,12 @@ function toAgentContent(
   }
 
   return content;
+}
+
+function hasToolCalls(
+  message: OpenAI.Chat.Completions.ChatCompletionMessage,
+): boolean {
+  return (message.tool_calls ?? []).length > 0;
 }
 
 function parseToolArguments(value: string): Record<string, unknown> {
