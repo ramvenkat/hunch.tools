@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-prompts.mjs",
     "dev": "tsx src/cli.ts",
+    "prepare": "npm run build",
     "prepack": "npm run build",
     "test": "vitest run",
     "test:built-prompts": "npm run build && node scripts/smoke-built-prompts.mjs",

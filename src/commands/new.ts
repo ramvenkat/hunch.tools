@@ -13,9 +13,12 @@ import { fileURLToPath } from "node:url";
 import { confirm, input } from "@inquirer/prompts";
 import ora from "ora";
 
-import { createAnthropicClient } from "../agent/anthropic.js";
 import { runAgentLoop } from "../agent/loop.js";
-import { loadConfig } from "../state/config.js";
+import {
+  resolveAgentClient,
+  type ResolveAgentClientOptions,
+} from "../agent/provider-router.js";
+import { loadConfig, type HunchConfig } from "../state/config.js";
 import type { PathResolverOptions } from "../state/paths.js";
 import {
   buildSpikeName,
@@ -36,13 +39,24 @@ export interface NewSpikeAnswers {
 
 export interface InitialGenerationOptions {
   spike: SpikeRef;
-  apiKey: string;
+  config: HunchConfig;
+  env: NodeJS.ProcessEnv;
+  apiKey?: string;
   model: string;
+  resolveClient?: (
+    options: ResolveAgentClientOptions,
+  ) => ReturnType<typeof resolveAgentClient>;
+  runAgent?: typeof runAgentLoop;
+}
+
+export interface InitialGenerationResult {
+  generated: boolean;
+  reason?: string;
 }
 
 export type InitialGenerationRunner = (
   options: InitialGenerationOptions,
-) => Promise<void>;
+) => Promise<void | InitialGenerationResult>;
 
 export interface CreateSpikeOptions extends PathResolverOptions {
   install?: boolean;
@@ -50,6 +64,10 @@ export interface CreateSpikeOptions extends PathResolverOptions {
   date?: Date;
   installTimeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  resolveClient?: (
+    options: ResolveAgentClientOptions,
+  ) => ReturnType<typeof resolveAgentClient>;
+  runAgent?: typeof runAgentLoop;
   initialGenerationRunner?: InitialGenerationRunner;
 }
 
@@ -136,13 +154,22 @@ export async function createSpike(
 
     if (options.generate !== false) {
       const env = options.env ?? process.env;
-      const apiKey = env[config.apiKeyEnv];
-      if (apiKey) {
-        await (options.initialGenerationRunner ?? runInitialGeneration)({
-          spike: stagingSpike,
-          apiKey,
-          model: config.model,
-        });
+      const result = await (
+        options.initialGenerationRunner ?? runInitialGeneration
+      )({
+        spike: stagingSpike,
+        config,
+        env,
+        apiKey: env[config.apiKeyEnv],
+        model: config.model,
+        resolveClient: options.resolveClient,
+        runAgent: options.runAgent,
+      });
+
+      if (result?.generated === false) {
+        out.warn(
+          `Skipped initial prototype generation: ${result.reason ?? "no model provider available"}.`,
+        );
       }
     }
 
@@ -237,17 +264,36 @@ function validateRequired(value: string): true | string {
 
 async function runInitialGeneration(
   options: InitialGenerationOptions,
-): Promise<void> {
-  const client = createAnthropicClient({
-    apiKey: options.apiKey,
-    model: options.model,
-  });
-  await runAgentLoop({
-    client,
-    spike: options.spike,
-    message:
-      "Generate the initial prototype for this spike. Replace the starter app with a focused, clickable flow that tests the journey.",
-  });
+): Promise<InitialGenerationResult> {
+  let client;
+  try {
+    ({ client } = await (options.resolveClient ?? resolveAgentClient)({
+      config: options.config,
+      env: options.env,
+    }));
+  } catch (error) {
+    if (error instanceof HunchError) {
+      return { generated: false, reason: error.message };
+    }
+
+    throw error;
+  }
+
+  try {
+    await (options.runAgent ?? runAgentLoop)({
+      client,
+      spike: options.spike,
+      message:
+        "Generate the initial prototype for this spike. Replace the starter app with a focused, clickable flow that tests the journey.",
+    });
+    return { generated: true };
+  } catch (error) {
+    if (error instanceof HunchError) {
+      return { generated: false, reason: error.message };
+    }
+
+    throw error;
+  }
 }
 
 async function npmInstall(cwd: string, timeoutMs = 120_000): Promise<void> {
