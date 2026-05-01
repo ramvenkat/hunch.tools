@@ -114,6 +114,31 @@ describe("askCommand", () => {
     );
   });
 
+  it("passes max tool iterations through to the agent", async () => {
+    const { homeDir } = await setupActiveSpike();
+    const client = fakeClient("openai");
+    const resolveClient = vi.fn().mockResolvedValue({ client, provider: "openai" });
+    const runAgent = vi.fn().mockResolvedValue(undefined);
+
+    await askCommand("hello", {
+      homeDir,
+      cwd: "/repo",
+      openai: true,
+      maxToolIterations: 80,
+      resolveClient,
+      runAgent,
+    });
+
+    expect(runAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client,
+        message: "hello",
+        progress: true,
+        maxToolIterations: 80,
+      }),
+    );
+  });
+
   it("rejects conflicting provider flags", async () => {
     const { homeDir } = await setupActiveSpike();
 

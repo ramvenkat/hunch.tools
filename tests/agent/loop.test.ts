@@ -160,6 +160,46 @@ describe("runAgentLoop", () => {
     ]);
   });
 
+  it("prints progress while thinking and running tools when enabled", async () => {
+    const spike = await makeSpike();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const client = fakeClient([
+      messageResponse({
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "write_file",
+            input: { path: "notes.txt", content: "hello" },
+          },
+        ],
+        stopReason: "tool_use",
+      }),
+      messageResponse({
+        content: [{ type: "text", text: "I wrote the notes." }],
+        stopReason: "end_turn",
+      }),
+    ]);
+
+    await runAgentLoop({
+      client,
+      spike,
+      message: "Write a note",
+      progress: true,
+    });
+
+    expect(stderr).toHaveBeenCalledWith(
+      "[hunch] Thinking with Anthropic claude-test...\n",
+    );
+    expect(stderr).toHaveBeenCalledWith(
+      "[hunch] Running write_file notes.txt...\n",
+    );
+    expect(stderr).toHaveBeenCalledWith("[hunch] write_file finished.\n");
+  });
+
   it("returns tool errors to Anthropic and lets the model recover", async () => {
     const spike = await makeSpike();
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -317,7 +357,9 @@ describe("runAgentLoop", () => {
         maxToolIterations: 1,
       }),
     ).rejects.toEqual(
-      new HunchError("Agent exceeded maximum tool iterations of 1."),
+      new HunchError(
+        "Agent exceeded maximum tool iterations of 1. Retry with --max-tool-iterations 2 if this is an intentionally large prototype pass.",
+      ),
     );
     expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
